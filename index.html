@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BELL 20">
+<meta name="theme-color" content="#141312">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+img{max-width:100%}[hidden]{display:none!important}
+</style>
+<title>BELL 20 케틀벨</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-column gym app — home (week, bell weight, 3 programs) → full-screen interval timer with a kettlebell that drains as time runs. Deliberately single dark "cast iron + chalk" look. */
+:root{
+  color-scheme:dark;
+  --iron:#141312; --iron-2:#1d1b19; --iron-3:#282522; --line:#3a3531;
+  --chalk:#efebe4; --dust:#a59e94; --handle:#9d978e;
+  --bell:#f2c230; --bell-ink:#141312;
+  --warm:#e8964f; --rest:#7fb0c2; --cool:#a597d6; --ok:#6cc08a;
+  --f-display:"Black Han Sans","Noto Sans KR",system-ui,sans-serif;
+  --f-num:"Big Shoulders Display","Black Han Sans",Impact,sans-serif;
+  --f-body:"Noto Sans KR",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--iron);
+  background-image:
+    radial-gradient(120% 60% at 50% -10%, rgba(239,235,228,.06), transparent 60%),
+    radial-gradient(40% 30% at 85% 20%, rgba(239,235,228,.035), transparent 70%);
+  color:var(--chalk); font-family:var(--f-body); font-size:15px; line-height:1.5;
+  padding-inline:16px;
+}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--bell);outline-offset:3px}
+.wrap{max-width:560px;margin:0 auto;padding-block:20px 48px;display:flex;flex-direction:column;gap:26px}
+
+/* header */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand svg{width:44px;height:48px;flex:none}
+.brand h1{margin:0;font-family:var(--f-num);font-weight:900;font-size:40px;line-height:.9;letter-spacing:.02em}
+.brand h1 b{color:var(--bell)}
+.brand p{margin:2px 0 0;font-size:12px;color:var(--dust);letter-spacing:.08em}
+.preview{border:1px solid var(--line);background:var(--iron-2);border-radius:999px;padding:7px 14px;font-size:13px;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.preview[aria-pressed="true"]{border-color:var(--bell);color:var(--bell)}
+
+.label{font-size:12px;letter-spacing:.14em;color:var(--dust);text-transform:uppercase;margin:0 0 10px;display:flex;justify-content:space-between;gap:8px}
+.label strong{color:var(--chalk);letter-spacing:.04em;font-weight:700}
+
+/* week */
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.day{border:1px solid var(--line);background:var(--iron-2);border-radius:10px;padding:8px 0 6px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:13px;color:var(--dust);min-width:0}
+.day .dot{width:18px;height:20px}
+.day.on{color:var(--chalk);border-color:var(--bell)}
+.day.today{background:var(--iron-3)}
+.day.today span{font-weight:700}
+.hint{font-size:12.5px;color:var(--dust);margin:8px 0 0}
+
+/* weight */
+.weights{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.kg{border:1px solid var(--line);background:var(--iron-2);border-radius:10px;padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.kg i{display:block;width:22px;height:22px;border-radius:50% 50% 46% 46%;background:var(--c);box-shadow:inset -3px -4px 0 rgba(0,0,0,.25)}
+.kg b{font-family:var(--f-num);font-size:18px;line-height:1}
+.kg[aria-checked="true"]{border-color:var(--c);background:var(--iron-3)}
+
+/* structure bar */
+.struct{display:flex;height:34px;border-radius:8px;overflow:hidden;font-size:12px;font-weight:700}
+.struct div{display:flex;align-items:center;justify-content:center;color:var(--bell-ink);min-width:0;white-space:nowrap;overflow:hidden}
+
+/* programs */
+.progs{display:flex;flex-direction:column;gap:10px}
+.prog{text-align:left;border:1px solid var(--line);background:var(--iron-2);border-radius:14px;padding:14px 16px;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-items:start}
+.prog .letter{grid-row:span 3;font-family:var(--f-num);font-weight:900;font-size:46px;line-height:.9;color:var(--dust)}
+.prog h3{margin:0;font-family:var(--f-display);font-weight:400;font-size:21px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.prog .focus{font-size:13px;color:var(--dust)}
+.prog ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.prog li{font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--chalk)}
+.prog[aria-checked="true"]{border-color:var(--bell);background:var(--iron-3)}
+.prog[aria-checked="true"] .letter{color:var(--bell)}
+.badge{font-family:var(--f-body);font-size:11px;font-weight:700;background:var(--bell);color:var(--bell-ink);border-radius:4px;padding:1px 6px;letter-spacing:.04em}
+
+.go{border:0;border-radius:16px;background:var(--bell);color:var(--bell-ink);padding:18px;font-family:var(--f-display);font-size:24px;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 6px 0 rgba(0,0,0,.4)}
+.go:active{transform:translateY(3px);box-shadow:0 3px 0 rgba(0,0,0,.4)}
+.go small{font-family:var(--f-num);font-size:22px;opacity:.75}
+.cue{font-size:13px;color:var(--dust);border-left:3px solid var(--line);padding-left:12px;margin:0}
+
+/* ===== workout screen ===== */
+.screen{position:fixed;inset:0;background:var(--iron);z-index:10;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px calc(env(safe-area-inset-bottom,0px) + 18px)}
+.screen .in{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;gap:14px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.phase{font-size:12px;font-weight:700;letter-spacing:.14em;padding:4px 10px;border-radius:999px;background:var(--pc,var(--bell));color:var(--bell-ink)}
+.clock{font-family:var(--f-num);font-size:24px;font-variant-numeric:tabular-nums;color:var(--dust)}
+.clock b{color:var(--chalk)}
+.ghost{border:1px solid var(--line);background:var(--iron-2);border-radius:999px;padding:6px 14px;font-size:13px}
+.ghost.warn{border-color:#e0574a;color:#ff8a7d}
+.timeline{position:relative;display:flex;gap:1px;height:8px;border-radius:4px;overflow:hidden}
+.timeline span{display:block;height:100%;opacity:.35}
+.timeline .now{position:absolute;top:-3px;bottom:-3px;width:3px;background:var(--chalk);border-radius:2px;left:0}
+.t-warm{background:var(--warm)} .t-work{background:var(--bell)} .t-rest{background:var(--rest)} .t-cool{background:var(--cool)}
+.timeline span.done{opacity:1}
+
+.stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}
+.round{font-size:13px;letter-spacing:.14em;color:var(--dust)}
+.duo{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;align-items:center;width:100%;margin-top:4px}
+.motion{position:relative;min-width:0;border:1px solid var(--line);border-radius:14px;background:var(--iron-2);overflow:hidden}
+.motion canvas,.mcard canvas{display:block;width:100%;aspect-ratio:4/3;max-width:100%}
+.mcap{position:absolute;left:10px;top:8px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--dust)}
+.yt{position:absolute;right:8px;top:8px;font-size:12px;font-weight:700;background:var(--iron);color:var(--chalk);border:1px solid var(--line);border-radius:999px;padding:4px 10px;text-decoration:none}
+.yt:hover{border-color:var(--bell);color:var(--bell)}
+.bellbox{width:100%;max-width:100%;aspect-ratio:200/220;position:relative;min-width:0}
+/* motion guide on home */
+.guide{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.mcard{border:1px solid var(--line);border-radius:14px;background:var(--iron-2);overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.mcard .mb{padding:8px 12px 12px;display:flex;flex-direction:column;gap:4px;flex:1}
+.mcard h4{margin:0;font-family:var(--f-display);font-weight:400;font-size:17px}
+.mcard p{margin:0;font-size:12.5px;color:var(--dust);line-height:1.45;flex:1}
+.mcard a{font-size:12.5px;font-weight:700;color:var(--bell);text-decoration:none;margin-top:4px}
+.mcard .ph{font-size:10.5px;letter-spacing:.12em;color:var(--dust)}
+@media (max-width:360px){.guide{grid-template-columns:1fr}}
+.bellbox svg{width:100%;height:100%;display:block;overflow:visible}
+.bellbox.pulse svg{animation:thump .16s ease-out}
+@keyframes thump{0%{transform:scale(1.03)}100%{transform:scale(1)}}
+.sec{font-family:var(--f-num);font-weight:900;fill:var(--chalk);stroke:var(--iron);stroke-width:7px;paint-order:stroke;font-variant-numeric:tabular-nums}
+.exname{font-family:var(--f-display);font-size:clamp(28px,8vw,40px);line-height:1.15;margin:6px 0 0;text-wrap:balance}
+.tip{font-size:14.5px;color:var(--dust);max-width:34ch;margin:0;text-wrap:balance}
+.next{display:flex;gap:10px;align-items:center;justify-content:center;font-size:14px;color:var(--dust);border-top:1px solid var(--line);padding-top:12px;margin-top:6px;width:100%}
+.next b{color:var(--chalk);font-weight:500}
+
+.controls{display:flex;justify-content:center;align-items:center;gap:18px}
+.ctl{width:56px;height:56px;border-radius:50%;border:1px solid var(--line);background:var(--iron-2);display:grid;place-items:center}
+.ctl svg{width:22px;height:22px;fill:currentColor}
+.ctl.main{width:78px;height:78px;background:var(--bell);color:var(--bell-ink);border:0;box-shadow:0 5px 0 rgba(0,0,0,.45)}
+.ctl.main svg{width:30px;height:30px}
+.sound{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+.tog{border:1px solid var(--line);background:var(--iron-2);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--dust)}
+.tog[aria-pressed="true"]{color:var(--chalk);border-color:var(--dust)}
+.vol{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dust)}
+.vol input{width:110px;accent-color:var(--bell)}
+
+/* done */
+.done-box{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}
+.done-box h2{font-family:var(--f-display);font-weight:400;font-size:38px;margin:0}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+.stat{border:1px solid var(--line);border-radius:12px;padding:12px 6px;background:var(--iron-2)}
+.stat b{display:block;font-family:var(--f-num);font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--dust)}
+
+@media (prefers-reduced-motion:reduce){.bellbox.pulse svg{animation:none}}
+@media (max-width:380px){.kg b{font-size:15px}.day{font-size:12px}.controls{gap:12px}}
+</style>
+
+</head>
+<body>
+<div class="wrap" id="home">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 200 220" aria-hidden="true"><path d="M62 104 C50 22 150 22 138 104" fill="none" stroke="var(--handle)" stroke-width="20" stroke-linecap="round"/><path d="M38 150 a62 62 0 1 1 124 0 c0 22-8 38-20 52 H58 C46 188 38 172 38 150Z" fill="var(--bell)"/></svg>
+      <div><h1>BELL<b>20</b></h1><p>주 3회 · 20분 케틀벨 루틴</p></div>
+    </div>
+    <button class="preview" id="previewBtn" aria-pressed="false">♪ 음악 미리듣기</button>
+  </header>
+
+  <section>
+    <p class="label">이번 주 <strong id="weekCount">0 / 3 완료</strong></p>
+    <div class="week" id="week"></div>
+    <p class="hint">요일을 눌러 운동일을 정하세요. 운동일 사이에 하루씩 쉬면 회복이 좋아요. (기본: 월·수·금)</p>
+  </section>
+
+  <section>
+    <p class="label">벨 무게 <strong id="kgLabel">16 kg</strong></p>
+    <div class="weights" id="weights" role="radiogroup" aria-label="케틀벨 무게"></div>
+    <p class="hint">색상은 대회용 케틀벨 규격 색입니다. 스윙이 15회 이상 깔끔하게 되는 무게를 고르세요.</p>
+  </section>
+
+  <section>
+    <p class="label">20분 구성 <strong>1,200초</strong></p>
+    <div class="struct">
+      <div style="flex:3;background:var(--warm)">워밍업 3′</div>
+      <div style="flex:15;background:var(--bell)">메인 5라운드 × 3′</div>
+      <div style="flex:2;background:var(--cool)">쿨다운 2′</div>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">프로그램 <strong>A → B → C 순환</strong></p>
+    <div class="progs" id="progs" role="radiogroup" aria-label="프로그램"></div>
+  </section>
+
+  <section>
+    <p class="label">동작 가이드 <strong>움직이는 시범 + 영상</strong></p>
+    <div class="guide" id="guide"></div>
+    <p class="hint">시범은 옆에서 본 모습이에요. 밝은 선이 가까운 쪽 팔다리입니다. ‘영상 보기’를 누르면 유튜브 검색 결과가 새 탭으로 열려요.</p>
+  </section>
+
+  <button class="go" id="startBtn">운동 시작 <small id="startDay">DAY A · 20:00</small></button>
+  <p class="cue">처음 3초는 비프음 카운트다운이 나옵니다. 스윙은 팔이 아니라 엉덩이로 — 비트의 킥에 맞춰 힙을 스냅하세요. 소리가 작으면 기기 볼륨(미디어 볼륨)을 올려 주세요.</p>
+</div>
+
+<div class="screen" id="workout" hidden>
+  <div class="in">
+    <div class="bar">
+      <span class="phase" id="phase">워밍업</span>
+      <span class="clock"><b id="elapsed">00:00</b> / 20:00</span>
+      <button class="ghost" id="exitBtn">종료</button>
+    </div>
+    <div class="timeline" id="timeline"><i class="now" id="now"></i></div>
+
+    <div class="stage">
+      <div class="round" id="round">ROUND 1 / 5</div>
+      <div class="duo">
+      <div class="motion">
+        <canvas id="mcv" aria-label="동작 시범 애니메이션"></canvas>
+        <span class="mcap" id="mcap">시범</span>
+        <a class="yt" id="ytLink" href="#" target="_blank" rel="noopener">▶ 영상 보기</a>
+      </div>
+      <div class="bellbox" id="bellbox">
+        <svg viewBox="0 0 200 220" aria-hidden="true">
+          <defs>
+            <clipPath id="bodyClip"><path d="M30 142 a70 70 0 1 1 140 0 c0 26-9 46-23 62 H53 C39 188 30 168 30 142Z"/></clipPath>
+          </defs>
+          <path d="M58 98 C44 8 156 8 142 98" fill="none" stroke="var(--handle)" stroke-width="20" stroke-linecap="round"/>
+          <path d="M30 142 a70 70 0 1 1 140 0 c0 26-9 46-23 62 H53 C39 188 30 168 30 142Z" fill="var(--iron-3)"/>
+          <g clip-path="url(#bodyClip)"><rect id="fill" x="20" y="60" width="160" height="150" fill="var(--pc,var(--bell))"/></g>
+          <path d="M30 142 a70 70 0 1 1 140 0 c0 26-9 46-23 62 H53 C39 188 30 168 30 142Z" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="3"/>
+          <text id="sec" class="sec" x="100" y="168" text-anchor="middle" font-size="78">40</text>
+        </svg>
+      </div>
+      </div>
+      <h2 class="exname" id="exname">헤일로</h2>
+      <p class="tip" id="tip"></p>
+      <div class="next">다음 <b id="next">—</b></div>
+    </div>
+
+    <div class="controls">
+      <button class="ctl" id="prevBtn" aria-label="이전 구간"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+      <button class="ctl main" id="playBtn" aria-label="일시정지"><svg viewBox="0 0 24 24" id="playIcon"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+      <button class="ctl" id="nextBtn" aria-label="다음 구간"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+    </div>
+    <div class="sound">
+      <button class="tog" id="musicTog" aria-pressed="true">♪ 음악</button>
+      <button class="tog" id="voiceTog" aria-pressed="true">음성 안내</button>
+      <label class="vol" for="vol">볼륨 <input type="range" id="vol" min="0" max="100" value="70"></label>
+    </div>
+    <button class="ghost warn" id="soundFix" hidden>소리가 멈췄어요 · 탭해서 다시 켜기</button>
+  </div>
+</div>
+
+<div class="screen" id="done" hidden>
+  <div class="in">
+    <div class="done-box">
+      <svg viewBox="0 0 200 220" width="110" aria-hidden="true"><path d="M58 98 C44 8 156 8 142 98" fill="none" stroke="var(--handle)" stroke-width="20" stroke-linecap="round"/><path d="M30 142 a70 70 0 1 1 140 0 c0 26-9 46-23 62 H53 C39 188 30 168 30 142Z" fill="var(--bell)"/><path d="M68 140l22 22 44-46" fill="none" stroke="var(--bell-ink)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h2 id="doneTitle">DAY A 완료</h2>
+      <div class="stats">
+        <div class="stat"><b id="dTime">20:00</b><span>운동 시간</span></div>
+        <div class="stat"><b id="dWork">0</b><span>작업 시간(분)</span></div>
+        <div class="stat"><b id="dWeek">1/3</b><span>이번 주</span></div>
+      </div>
+      <p class="tip" id="doneMsg">물 한 잔 마시고, 내일은 쉬세요.</p>
+      <button class="go" id="homeBtn" style="width:100%">홈으로</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('bell20.'+k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('bell20.'+k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ---------- program data (every day = exactly 1200 s) ---------- */
+const WARM = [
+  {n:'헤일로', d:40, t:'warm', tip:'벨을 거꾸로 잡고 머리 주위를 천천히 돌립니다. 20초마다 방향 전환.'},
+  {n:'프라잉 스쿼트', d:40, t:'warm', tip:'고블릿 자세로 깊게 앉아 팔꿈치로 무릎을 바깥으로 밀어 고관절을 엽니다.'},
+  {n:'힙 힌지 드릴', d:40, t:'warm', tip:'엉덩이를 뒤로 보내고 등은 일자로. 정강이는 수직에 가깝게.'},
+  {n:'데드스톱 스윙', d:40, t:'warm', tip:'매 회 벨을 바닥에 내려놓고 다시 하이크. 가볍게 리듬만 잡으세요.'},
+  {n:'준비', d:20, t:'rest', tip:'호흡을 정리하고 벨을 발 앞 30cm에 두세요.'}
+];
+const COOL = [
+  {n:'차일드 포즈', d:30, t:'cool', tip:'팔을 앞으로 길게 뻗고 등 전체를 늘립니다.'},
+  {n:'피전 스트레칭', d:30, t:'cool', tip:'앞다리는 접고 뒷다리는 뒤로 뻗은 채 상체를 숙입니다. 15초 후 좌우 교대.'},
+  {n:'흉추 회전', d:30, t:'cool', tip:'네발 자세에서 한 팔을 천장으로 크게 열었다가 반대쪽 겨드랑이 아래로 넣습니다.'},
+  {n:'복식 호흡', d:30, t:'cool', tip:'4초 들이쉬고 6초 내쉬기. 심박을 내립니다.'}
+];
+const R = (n, d, tip) => ({n, d, t:'work', tip});
+const REST = d => ({n:'휴식', d, t:'rest', tip:'벨을 내려놓고 코로 숨 쉬세요.'});
+const DAYS = [
+  {id:'A', name:'스윙 파워', focus:'후면 사슬 · 폭발력', round:[
+    R('투핸드 스윙', 40, '힙을 스냅해서 벨을 가슴 높이로. 정점에서 엉덩이·복부 꽉.'), REST(20),
+    R('고블릿 스쿼트', 40, '벨을 가슴에 붙이고 팔꿈치는 무릎 안쪽으로. 발뒤꿈치로 밀어 올라옵니다.'), REST(20),
+    R('플랭크 풀스루', 40, '하이 플랭크에서 반대 손으로 벨을 끌어 옮깁니다. 골반이 흔들리지 않게.'), REST(20)
+  ]},
+  {id:'B', name:'근력 빌더', focus:'어깨 · 하체 · 등', round:[
+    R('클린 & 프레스 (왼쪽)', 30, '벨을 랙 포지션으로 클린, 갈비뼈를 내리고 머리 위로 프레스.'),
+    R('클린 & 프레스 (오른쪽)', 30, '손목은 곧게, 벨은 팔뚝 바깥에 얹힌 느낌으로.'), REST(15),
+    R('고블릿 리버스 런지', 40, '한 발씩 뒤로 내딛고 뒷무릎이 바닥에 살짝 닿을 듯이. 좌우 교대.'), REST(15),
+    R('원암 로우 (왼쪽)', 25, '힙 힌지 자세로 팔꿈치를 엉덩이 쪽으로 당깁니다.'),
+    R('원암 로우 (오른쪽)', 25, '어깨를 귀에서 멀리. 몸통이 돌아가지 않게.')
+  ]},
+  {id:'C', name:'컨디셔닝 & 코어', focus:'심폐 · 회전 안정성', round:[
+    R('원암 스윙 (왼쪽)', 30, '반대 팔도 함께 흔들어 균형을 잡습니다. 어깨는 패킹.'),
+    R('원암 스윙 (오른쪽)', 30, '벨이 몸에서 멀어지지 않게, 힙으로 띄우세요.'), REST(15),
+    R('하이 풀', 30, '스윙 정점에서 팔꿈치를 뒤로 당겨 벨을 가슴 앞으로 끌어옵니다.'), REST(15),
+    R('하프 겟업 (왼쪽)', 30, '누운 자세에서 팔꿈치 → 손으로 올라와 브릿지까지. 벨은 천장을 향해.'),
+    R('하프 겟업 (오른쪽)', 30, '눈은 벨을 보고, 천천히 역순으로 내려옵니다.')
+  ]}
+];
+const ROUNDS = 5;
+function buildPlan(day){
+  const segs = [];
+  WARM.forEach(s => segs.push({...s, phase:'warm'}));
+  for (let r = 1; r <= ROUNDS; r++) day.round.forEach(s => segs.push({...s, phase:'main', r}));
+  COOL.forEach(s => segs.push({...s, phase:'cool'}));
+  let acc = 0; segs.forEach(s => { s.start = acc; acc += s.d; });
+  return segs;
+}
+
+const BELLS = [[8,'#e86aa2'],[12,'#3d8ae0'],[16,'#f2c230'],[20,'#9a6fd0'],[24,'#3fae5c'],[28,'#f08a34'],[32,'#e0463a']];
+const WEEKDAYS = ['월','화','수','목','금','토','일'];
+
+/* ---------- state ---------- */
+let sched = store.get('sched', [0,2,4]);
+let kg = store.get('kg', 16);
+let log = store.get('log', []);
+let chosen = DAYS[log.length % 3].id;
+
+const pad = n => String(n).padStart(2,'0');
+const fmt = s => pad(Math.floor(s/60)) + ':' + pad(Math.floor(s%60));
+const iso = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+function weekInfo(){
+  const now = new Date(); const ti = (now.getDay()+6)%7;
+  const mon = new Date(now); mon.setDate(now.getDate()-ti);
+  const dates = [...Array(7)].map((_,i) => { const d = new Date(mon); d.setDate(mon.getDate()+i); return iso(d); });
+  const done = dates.map(ds => log.some(l => l.date === ds));
+  return {ti, dates, done, count: done.filter(Boolean).length};
+}
+function setBellColor(){
+  const c = (BELLS.find(b => b[0] === kg) || BELLS[2])[1];
+  document.documentElement.style.setProperty('--bell', c);
+}
+
+/* ---------- motion demos: side-view figure, keyframed joint angles ----------
+   angles in degrees. t = torso from vertical (+ = leaning forward).
+   ua/fa/th/sh = upper arm, forearm, thigh, shin measured from straight down (+ = forward).
+   limb 1 = near side (bright), limb 2 = far side (dim). plant:1 keeps foot 1 on the floor. */
+const BASE = {plant:1, ax:0, hx:0, hy:0, t:0, ua1:0,fa1:0,ua2:0,fa2:0, th1:0,sh1:0,th2:0,sh2:0, f1:0,f2:0, bell:'none', bx:0, glow:0};
+const legs = (th, sh) => ({th1:th, sh1:sh, th2:th, sh2:sh});
+const arms = (ua, fa) => ({ua1:ua, fa1:fa, ua2:ua, fa2:fa});
+const SW_BACK = {t:55, ...legs(25,-5), ...arms(-35,-35)};
+const SW_MID  = {t:25, ...legs(10,-3), ...arms(20,20)};
+const SW_TOP  = {t:-4, ...arms(85,88)};
+const HINGE   = {t:62, ...legs(25,-5)};
+const GOB_UP  = {...arms(20,160), bell:'hold'};
+const GOB_DN  = {t:35, ...legs(80,-30), ...arms(35,175), bell:'hold'};
+const PLANK   = {plant:0, hx:0, hy:47.5, t:75, ...legs(-59,-59), f1:-70, f2:-70, bell:'floor'};
+const TGU     = {plant:0, hx:0, hy:8, t:90, th1:-135, sh1:-45, th2:-90, sh2:-90, f2:90, ua1:180, fa1:180, ua2:-80, fa2:-80, bell:'rack'};
+const QUAD    = {plant:0, hx:0, hy:46, t:75, ...legs(0,-90), f1:180, f2:180, ua2:0, fa2:0};
+const SUPINE  = {plant:0, hx:0, hy:8, t:90, th1:-135, sh1:-45, th2:-128, sh2:-52, ...arms(-120,-90)};
+const MOTIONS = {
+  swing:   {q:'two hand kettlebell swing technique', f:[[{...SW_BACK,bell:'h12'},.45],[{...SW_MID,bell:'h12'},.25],[{...SW_TOP,bell:'h12'},.45],[{...SW_MID,bell:'h12'},.3]]},
+  swing1:  {q:'one arm kettlebell swing technique', f:[[{...SW_BACK,ua2:-20,fa2:-20,bell:'h1'},.45],[{...SW_MID,ua2:10,fa2:10,bell:'h1'},.25],[{...SW_TOP,ua2:50,fa2:55,bell:'h1'},.45],[{...SW_MID,ua2:10,fa2:10,bell:'h1'},.3]]},
+  deadstop:{q:'dead stop kettlebell swing', f:[[{t:70,...legs(50,-20),...arms(15,15),bell:'h12'},.7],[{...SW_BACK,bell:'h12'},.45],[{...SW_TOP,bell:'h12'},.55],[{...SW_BACK,bell:'h12'},.5]]},
+  hinge:   {q:'hip hinge drill', f:[[{...arms(-35,60)},1],[{...HINGE,...arms(27,122)},1.2]]},
+  goblet:  {q:'kettlebell goblet squat form', f:[[GOB_UP,.9],[GOB_DN,1.1],[GOB_DN,.3]]},
+  pry:     {q:'goblet squat prying', f:[[{...GOB_DN,t:28,...arms(45,175)},.9],[{...GOB_DN,t:42,...arms(22,170)},.9]]},
+  halo:    {q:'kettlebell halo how to', f:[[{...arms(110,160),bell:'hold'},.55],[{...arms(150,200),bell:'hold'},.55],[{...arms(170,240),bell:'hold'},.55],[{...arms(150,200),bell:'hold'},.55]]},
+  pull:    {q:'kettlebell plank pull through', f:[
+             [{...PLANK,bx:26},.5],[{...PLANK,ua1:-25,fa1:-25,bx:26},.5],[{...PLANK,ua1:15,fa1:15,bx:65},.6],
+             [{...PLANK,bx:65},.5],[{...PLANK,ua1:15,fa1:15,bx:65},.5],[{...PLANK,ua1:-25,fa1:-25,bx:26},.6]]},
+  cp:      {q:'kettlebell clean and press technique', f:[[{bell:'h1'},.5],[{t:30,...legs(15,-5),ua1:-10,fa1:-10,bell:'h1'},.45],[{ua1:20,fa1:165,bell:'rack'},.7],[{ua1:178,fa1:180,bell:'rack'},.9],[{ua1:20,fa1:165,bell:'rack'},.6]]},
+  lunge:   {q:'goblet reverse lunge kettlebell', f:[[GOB_UP,.8],[{...GOB_UP,t:5,th1:75,sh1:-5,th2:-15,sh2:-80,f2:-35},1],[{...GOB_UP,t:5,th1:75,sh1:-5,th2:-15,sh2:-80,f2:-35},.3]]},
+  row:     {q:'single arm kettlebell row', f:[[{...HINGE,t:65,ua1:0,fa1:0,ua2:25,fa2:40,bell:'h1'},.8],[{...HINGE,t:65,ua1:-95,fa1:-5,ua2:25,fa2:40,bell:'h1'},.8]]},
+  hp:      {q:'kettlebell high pull form', f:[[{...SW_BACK,bell:'h12'},.45],[{...SW_MID,bell:'h12'},.25],[{t:-3,...arms(-100,80),bell:'h12'},.5],[{...SW_MID,bell:'h12'},.3]]},
+  tgu:     {q:'half turkish get up kettlebell', f:[[TGU,.9],[{...TGU,t:60,ua2:-20,fa2:-90},.9],[{...TGU,t:35,ua2:-30,fa2:-30},1.1],[{...TGU,t:60,ua2:-20,fa2:-90},.8]]},
+  child:   {q:"child's pose stretch", f:[[{plant:0,hx:-15,hy:22,t:100,...legs(63,-90),f1:180,f2:180,...arms(78,85)},2],[{plant:0,hx:-13,hy:24,t:96,...legs(63,-90),f1:180,f2:180,...arms(80,86)},2]]},
+  pigeon:  {q:'pigeon stretch', f:[[{plant:0,hx:0,hy:12,t:0,th1:90,sh1:-90,th2:-90,sh2:-90,f1:180,f2:180,...arms(15,15)},1.6],[{plant:0,hx:0,hy:12,t:55,th1:90,sh1:-90,th2:-90,sh2:-90,f1:180,f2:180,...arms(40,55)},2]]},
+  tspine:  {q:'quadruped thoracic rotation', f:[[{...QUAD,ua1:-20,fa1:-60},1.2],[{...QUAD,ua1:170,fa1:175},1.4]]},
+  breath:  {q:'diaphragmatic breathing lying down', f:[[{...SUPINE,glow:0},4],[{...SUPINE,glow:1},6]]},
+  rest:    {q:'kettlebell swing technique', f:[[{...arms(-35,60),bell:'floor',bx:30},1.6],[{t:3,...arms(-35,62),bell:'floor',bx:30},1.6]]}
+};
+const MOTION_OF = {
+  '헤일로':'halo','프라잉 스쿼트':'pry','힙 힌지 드릴':'hinge','데드스톱 스윙':'deadstop','준비':'rest','휴식':'rest',
+  '투핸드 스윙':'swing','고블릿 스쿼트':'goblet','플랭크 풀스루':'pull','클린 & 프레스':'cp','고블릿 리버스 런지':'lunge',
+  '원암 로우':'row','원암 스윙':'swing1','하이 풀':'hp','하프 겟업':'tgu',
+  '차일드 포즈':'child','피전 스트레칭':'pigeon','흉추 회전':'tspine','복식 호흡':'breath'
+};
+const baseName = n => n.replace(/ \((왼|오른)쪽\)/, '');
+const motionKey = n => MOTION_OF[baseName(n)] || 'rest';
+const ytUrl = key => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(MOTIONS[key].q);
+
+const D2R = Math.PI/180;
+const dn = (a, L) => [Math.sin(a*D2R)*L, -Math.cos(a*D2R)*L];
+const add = (a, b) => [a[0]+b[0], a[1]+b[1]];
+function joints(p){
+  const k1 = dn(p.th1,42), s1 = dn(p.sh1,42);
+  const hip = p.plant ? [p.ax-k1[0]-s1[0], 4-k1[1]-s1[1]] : [p.hx, p.hy];
+  const knee1 = add(hip,k1), ank1 = add(knee1,s1);
+  const knee2 = add(hip,dn(p.th2,42)), ank2 = add(knee2,dn(p.sh2,42));
+  const toe = (a,f) => [a[0]+Math.cos(f*D2R)*12, a[1]+Math.sin(f*D2R)*12];
+  const td = [Math.sin(p.t*D2R), Math.cos(p.t*D2R)];
+  const sh = [hip[0]+td[0]*52, hip[1]+td[1]*52];
+  const head = [sh[0]+td[0]*16, sh[1]+td[1]*16];
+  const el1 = add(sh,dn(p.ua1,30)), hd1 = add(el1,dn(p.fa1,28));
+  const el2 = add(sh,dn(p.ua2,30)), hd2 = add(el2,dn(p.fa2,28));
+  const J = {hip,knee1,ank1,toe1:toe(ank1,p.f1),knee2,ank2,toe2:toe(ank2,p.f2),sh,head,el1,hd1,el2,hd2};
+  J.bell = bellPos(p, J);
+  return J;
+}
+function bellPos(p, J){
+  if (p.bell === 'none') return null;
+  if (p.bell === 'floor') return {c:[p.bx,9], h:[p.bx,19]};
+  if (p.bell === 'hold'){ const m = [(J.hd1[0]+J.hd2[0])/2, (J.hd1[1]+J.hd2[1])/2]; return {c:[m[0]+4,m[1]-10], h:m}; }
+  const two = p.bell === 'h12';
+  const hand = two ? [(J.hd1[0]+J.hd2[0])/2, (J.hd1[1]+J.hd2[1])/2] : J.hd1;
+  const el = two ? [(J.el1[0]+J.el2[0])/2, (J.el1[1]+J.el2[1])/2] : J.el1;
+  const L = Math.hypot(hand[0]-el[0], hand[1]-el[1]) || 1, fd = [(hand[0]-el[0])/L, (hand[1]-el[1])/L];
+  if (p.bell === 'rack') return {c:[hand[0]-fd[0]*5-fd[1]*9, hand[1]-fd[1]*5+fd[0]*9], h:hand};
+  return {c:[hand[0]+fd[0]*13, hand[1]+fd[1]*13], h:hand};
+}
+const ease = u => u < .5 ? 2*u*u : 1 - Math.pow(-2*u+2, 2)/2;
+function poseAt(m, time){
+  const F = m.frames, total = m.total;
+  let t = time % total, i = 0;
+  while (t > F[i][1]) { t -= F[i][1]; i++; }
+  const a = F[i][0], b = F[(i+1)%F.length][0], u = ease(Math.min(1, t/F[i][1]));
+  const p = {...a};
+  for (const k in a) if (typeof a[k] === 'number') p[k] = a[k] + (b[k]-a[k])*u;
+  return p;
+}
+function prepMotion(key){
+  const M = MOTIONS[key];
+  if (!M.frames){
+    M.frames = M.f.map(([p,d]) => [{...BASE, ...p}, d]);
+    M.total = M.frames.reduce((s,f) => s+f[1], 0);
+    let x0=-20, x1=20, y0=0, y1=40;
+    for (let s = 0; s < 40; s++){                       // sample the loop for a stable frame box
+      const J = joints(poseAt(M, M.total*s/40));
+      const pts = [J.hip,J.knee1,J.ank1,J.toe1,J.knee2,J.ank2,J.toe2,J.sh,J.el1,J.hd1,J.el2,J.hd2];
+      pts.push([J.head[0]-9,J.head[1]-9],[J.head[0]+9,J.head[1]+9]);
+      if (J.bell) pts.push([J.bell.c[0]-10,J.bell.c[1]-10],[J.bell.c[0]+10,J.bell.c[1]+10]);
+      pts.forEach(([x,y]) => { x0=Math.min(x0,x); x1=Math.max(x1,x); y0=Math.min(y0,y); y1=Math.max(y1,y); });
+    }
+    M.box = [x0-12, Math.min(y0,0)-6, x1+12, y1+10];
+  }
+  return M;
+}
+
+let palette = {};
+function readPalette(){
+  const cs = getComputedStyle(document.documentElement);
+  ['--chalk','--dust','--bell','--line','--handle','--iron-3'].forEach(k => palette[k] = cs.getPropertyValue(k).trim());
+}
+const stages = new Set();
+function attachMotion(canvas, key, mirror){
+  const st = {canvas, key, mirror};
+  canvas._motion = st; stages.add(st); return st;
+}
+function drawStage(st, time){
+  const cv = st.canvas;
+  if (!cv.isConnected){ stages.delete(st); return; }
+  const r = cv.getBoundingClientRect();
+  if (!r.width || r.bottom < 0 || r.top > innerHeight) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = Math.round(r.width*dpr), H = Math.round(r.height*dpr);
+  if (cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+  const M = prepMotion(st.key), [x0,y0,x1,y1] = M.box;
+  const s = Math.min(W/(x1-x0), H/(y1-y0));
+  const g = cv.getContext('2d');
+  g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H);
+  // world → screen: y up, centred, optionally mirrored for the other side
+  const ox = (W - (x1-x0)*s)/2, oy = (H - (y1-y0)*s)/2;
+  g.setTransform(st.mirror ? -s : s, 0, 0, -s, st.mirror ? W-ox+x0*s : ox - x0*s, H - oy + y0*s);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  // floor
+  g.strokeStyle = palette['--line']; g.lineWidth = 2/s;
+  g.beginPath(); g.moveTo(x0-200, 0); g.lineTo(x1+200, 0); g.stroke();
+  const p = poseAt(M, time), J = joints(p);
+  const seg = (pts, w, c) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.moveTo(...pts[0]); pts.slice(1).forEach(q => g.lineTo(...q)); g.stroke(); };
+  const far = palette['--dust'], near = palette['--chalk'];
+  g.globalAlpha = .55;
+  seg([J.hip,J.knee2,J.ank2,J.toe2], 8, far);
+  seg([J.sh,J.el2,J.hd2], 7, far);
+  g.globalAlpha = 1;
+  if (p.glow > 0.01){
+    const mid = [(J.hip[0]+J.sh[0])/2, (J.hip[1]+J.sh[1])/2 + 6];
+    g.fillStyle = palette['--bell']; g.globalAlpha = .15 + .35*p.glow;
+    g.beginPath(); g.arc(mid[0], mid[1], 8 + 9*p.glow, 0, Math.PI*2); g.fill(); g.globalAlpha = 1;
+  }
+  seg([J.hip,J.sh], 11, near);
+  g.fillStyle = near; g.beginPath(); g.arc(J.head[0], J.head[1], 9, 0, Math.PI*2); g.fill();
+  seg([J.hip,J.knee1,J.ank1,J.toe1], 9, near);
+  if (J.bell){
+    const {c,h} = J.bell;
+    g.strokeStyle = palette['--handle']; g.lineWidth = 3.2;
+    const ang = Math.atan2(h[1]-c[1], h[0]-c[0]);
+    g.beginPath(); g.arc(c[0]+Math.cos(ang)*8, c[1]+Math.sin(ang)*8, 5, ang-1.6, ang+1.6); g.stroke();
+    g.fillStyle = palette['--bell']; g.beginPath(); g.arc(c[0], c[1], 9, 0, Math.PI*2); g.fill();
+  }
+  seg([J.sh,J.el1,J.hd1], 8, near);
+}
+const motionStart = performance.now();
+function motionLoop(now){
+  readPalette();
+  const time = reduceMotionPref ? 0.6 : (now - motionStart)/1000;
+  stages.forEach(st => drawStage(st, time));
+  requestAnimationFrame(motionLoop);
+}
+const reduceMotionPref = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function renderGuide(){
+  const seen = new Set(), items = [];
+  const push = (s, ph) => { const k = motionKey(s.n); if (k === 'rest' || seen.has(k)) return; seen.add(k); items.push({k, n:baseName(s.n), tip:s.tip, ph}); };
+  WARM.forEach(s => push(s, '워밍업'));
+  DAYS.forEach(d => d.round.forEach(s => push(s, 'DAY ' + d.id)));
+  COOL.forEach(s => push(s, '쿨다운'));
+  $('guide').innerHTML = items.map(it =>
+    `<article class="mcard"><canvas data-k="${it.k}" aria-label="${it.n} 동작 시범"></canvas>
+      <div class="mb"><span class="ph">${it.ph}</span><h4>${it.n}</h4><p>${it.tip}</p>
+      <a href="${ytUrl(it.k)}" target="_blank" rel="noopener">▶ 영상 보기</a></div></article>`).join('');
+  $('guide').querySelectorAll('canvas').forEach(cv => attachMotion(cv, cv.dataset.k, false));
+}
+const workoutMotion = attachMotion($('mcv'), 'halo', false);
+function showMotion(name){
+  workoutMotion.key = motionKey(name);
+  workoutMotion.mirror = /오른쪽/.test(name);
+  $('ytLink').href = ytUrl(workoutMotion.key);
+}
+
+/* ---------- home render ---------- */
+const miniBell = (filled) => `<svg class="dot" viewBox="0 0 200 220" aria-hidden="true"><path d="M62 104 C50 22 150 22 138 104" fill="none" stroke="${filled?'var(--handle)':'var(--line)'}" stroke-width="22"/><path d="M38 150 a62 62 0 1 1 124 0 c0 22-8 38-20 52 H58 C46 188 38 172 38 150Z" fill="${filled?'var(--bell)':'var(--iron-3)'}" stroke="var(--line)" stroke-width="8"/></svg>`;
+function renderHome(){
+  setBellColor();
+  const w = weekInfo();
+  $('week').innerHTML = WEEKDAYS.map((d,i) =>
+    `<button class="day ${sched.includes(i)?'on':''} ${i===w.ti?'today':''}" data-i="${i}" aria-pressed="${sched.includes(i)}" aria-label="${d}요일${w.done[i]?' 완료':''}">
+      <span>${i===w.ti?'오늘':d}</span>${miniBell(w.done[i])}</button>`).join('');
+  $('weekCount').textContent = `${w.count} / 3 완료`;
+  $('weights').innerHTML = BELLS.map(([k,c]) =>
+    `<button class="kg" role="radio" aria-checked="${k===kg}" data-kg="${k}" style="--c:${c}"><i></i><b>${k}</b></button>`).join('');
+  $('kgLabel').textContent = kg + ' kg';
+  const rec = DAYS[log.length % 3].id;
+  $('progs').innerHTML = DAYS.map(d => {
+    const names = [...new Set(d.round.filter(s=>s.t==='work').map(s => s.n.replace(/ \((왼|오른)쪽\)/,'')))];
+    return `<button class="prog" role="radio" aria-checked="${d.id===chosen}" data-id="${d.id}">
+      <span class="letter">${d.id}</span>
+      <h3>${d.name}${d.id===rec?'<span class="badge">다음 차례</span>':''}</h3>
+      <span class="focus">${d.focus} · 5라운드</span>
+      <ul>${names.map(n=>`<li>${n}</li>`).join('')}</ul></button>`;
+  }).join('');
+  $('startDay').textContent = `DAY ${chosen} · 20:00`;
+}
+$('week').addEventListener('click', e => {
+  const b = e.target.closest('.day'); if (!b) return;
+  const i = +b.dataset.i;
+  sched = sched.includes(i) ? sched.filter(x=>x!==i) : [...sched, i].sort();
+  store.set('sched', sched); renderHome();
+});
+$('weights').addEventListener('click', e => {
+  const b = e.target.closest('.kg'); if (!b) return;
+  kg = +b.dataset.kg; store.set('kg', kg); renderHome();
+});
+$('progs').addEventListener('click', e => {
+  const b = e.target.closest('.prog'); if (!b) return;
+  chosen = b.dataset.id; renderHome();
+});
+
+/* ---------- audio: synthesized gym beat ---------- */
+const mtof = m => 440 * Math.pow(2, (m-69)/12);
+const PROG = [
+  {root:33, arp:[57,60,64,69], pad:[57,60,64]},   // Am
+  {root:29, arp:[53,57,60,65], pad:[53,57,60]},   // F
+  {root:36, arp:[55,60,64,67], pad:[55,60,64]},   // C
+  {root:31, arp:[55,59,62,67], pad:[55,59,62]}    // G
+];
+const Audio = {
+  ctx:null, on:false, level:2, bpm:132, step:0, next:0, timer:null, vol:0.7,
+  init(){
+    if (this.ctx) { this.unlock(); return; }
+    const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+    const ctx = this.ctx = new C();
+    // iPhone: play through the media channel so the silent switch doesn't mute the music
+    try{ if (navigator.audioSession) navigator.audioSession.type = 'playback'; }catch(e){}
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isIOS && !navigator.audioSession && ctx.createMediaStreamDestination){
+      const dest = ctx.createMediaStreamDestination(); comp.connect(dest);
+      const el = this.el = document.createElement('audio');
+      el.setAttribute('playsinline',''); el.hidden = true; el.srcObject = dest.stream;
+      document.body.appendChild(el);
+      const p = el.play(); if (p && p.catch) p.catch(() => { this.el = null; comp.connect(ctx.destination); });
+    } else comp.connect(ctx.destination);
+    this.music = ctx.createGain(); this.music.gain.value = this.vol * 0.8; this.music.connect(comp);
+    this.sfx = ctx.createGain(); this.sfx.gain.value = 0.55; this.sfx.connect(comp);
+    const len = ctx.sampleRate; const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0); for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    this.noise = buf;
+    this.unlock();
+  },
+  unlock(){
+    const ctx = this.ctx; if (!ctx) return;
+    try{
+      if (ctx.state !== 'running') ctx.resume();
+      const s = ctx.createBufferSource(); s.buffer = ctx.createBuffer(1, 1, 22050); s.connect(ctx.destination); s.start(0);
+      if (this.el && this.el.paused) { const p = this.el.play(); if (p && p.catch) p.catch(()=>{}); }
+    }catch(e){}
+  },
+  get audible(){ return !!this.ctx && this.ctx.state === 'running'; },
+  setVol(v){ this.vol = v; if (this.music) this.music.gain.setTargetAtTime(v*0.8, this.ctx.currentTime, 0.05); },
+  start(){
+    if (!this.ctx || this.on) return;
+    this.on = true; this.step = 0; this.next = this.ctx.currentTime + 0.06;
+    this.timer = setInterval(() => this.schedule(), 25);
+  },
+  stop(){ this.on = false; clearInterval(this.timer); },
+  setMode(level, bpm){ this.level = level; this.bpm = bpm; },
+  schedule(){
+    const now = this.ctx.currentTime;
+    if (this.next < now - 0.2) this.next = now + 0.05;   // catch up after a stall instead of bursting notes
+    try{
+      while (this.next < now + 0.12){
+        this.play(this.step, this.next);
+        this.next += 60 / this.bpm / 4; this.step++;
+      }
+    }catch(e){ this.next += 60 / this.bpm / 4; this.step++; }
+  },
+  env(g, t, a, peak, rel){ g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t+a); g.gain.exponentialRampToValueAtTime(0.0001, t+a+rel); },
+  kick(t, v){
+    const c=this.ctx, o=c.createOscillator(), g=c.createGain();
+    o.frequency.setValueAtTime(155, t); o.frequency.exponentialRampToValueAtTime(42, t+0.13);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t+0.38);
+    chain(o,g,this.music); o.start(t); o.stop(t+0.4);
+  },
+  hit(t, type, f, q, v, dur, out){
+    const c=this.ctx, s=c.createBufferSource(), fl=c.createBiquadFilter(), g=c.createGain();
+    s.buffer=this.noise; fl.type=type; fl.frequency.value=f; fl.Q.value=q;
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    chain(s,fl,g,out||this.music); s.start(t, Math.random()*0.5); s.stop(t+dur+0.02);
+  },
+  clap(t, v){ [0, 0.012, 0.024].forEach((o,i) => this.hit(t+o, 'bandpass', 1400, 1.2, v*(i===2?1:0.6), i===2?0.2:0.03)); },
+  tone(t, midi, dur, v, wave, cutoff, out){
+    const c=this.ctx, o=c.createOscillator(), f=c.createBiquadFilter(), g=c.createGain();
+    o.type=wave; o.frequency.value=mtof(midi);
+    f.type='lowpass'; f.frequency.setValueAtTime(cutoff, t); f.frequency.exponentialRampToValueAtTime(Math.max(120, cutoff*0.3), t+dur);
+    this.env(g, t, 0.006, v, dur);
+    chain(o,f,g,out||this.music); o.start(t); o.stop(t+dur+0.05);
+  },
+  pad(t, notes, dur, v){
+    const c=this.ctx, f=c.createBiquadFilter(), g=c.createGain();
+    f.type='lowpass'; f.frequency.value=900;
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(v,t+dur*0.25); g.gain.linearRampToValueAtTime(0.0001,t+dur);
+    chain(f,g,this.music);
+    notes.forEach(m => [-7,7].forEach(dt => { const o=c.createOscillator(); o.type='sawtooth'; o.frequency.value=mtof(m); o.detune.value=dt; o.connect(f); o.start(t); o.stop(t+dur+0.05); }));
+  },
+  play(s, t){
+    const bar = Math.floor(s/16), st = s%16, ch = PROG[bar%4], L = this.level, sp = 60/this.bpm/4;
+    if (st === 0 && L <= 1) this.pad(t, ch.pad, sp*16, L===0 ? 0.05 : 0.025);
+    if (L >= 1){
+      const k = L===2 ? st%4===0 : (st===0 || st===8);
+      if (k){ this.kick(t, L===2 ? 0.95 : 0.7); pulse(t - this.ctx.currentTime); }
+      if (st%4===2) this.hit(t, 'highpass', 7500, 0.7, L===2?0.22:0.14, 0.06);
+      if (L===2 && st%2===1) this.hit(t, 'highpass', 9000, 0.7, 0.06, 0.03);
+      if (L===2){
+        if (st%4===2) this.tone(t, ch.root, sp*1.7, 0.32, 'sawtooth', 700);
+        if (st===3 || st===11) this.tone(t, ch.root+12, sp*0.9, 0.16, 'sawtooth', 900);
+      } else if (st===0 || st===8) this.tone(t, ch.root, sp*6, 0.22, 'sawtooth', 450);
+    }
+    if (L === 2){
+      if (st===4 || st===12) this.clap(t, 0.5);
+      if (st===15 && bar%4===3) this.hit(t, 'bandpass', 1800, 1, 0.3, 0.1);
+      if (bar%4 >= 2 && st%2===0) this.tone(t, ch.arp[(st/2)%4]+12, sp*1.4, 0.06, 'square', 2600);
+    }
+    if (L === 0 && st%4===0) this.tone(t, ch.arp[(st/4)%4], sp*3.5, 0.05, 'triangle', 1800);
+  },
+  beep(freq, dur, v){
+    if (!this.ctx) return; const t = this.ctx.currentTime;
+    this.tone(t, 69 + 12*Math.log2(freq/440), dur, v||0.5, 'square', 3000, this.sfx);
+  },
+  riser(dur){
+    if (!this.ctx || !this.on) return;
+    const c=this.ctx, t=c.currentTime, s=c.createBufferSource(), f=c.createBiquadFilter(), g=c.createGain();
+    s.buffer=this.noise; s.loop=true; f.type='bandpass'; f.Q.value=3;
+    f.frequency.setValueAtTime(300,t); f.frequency.exponentialRampToValueAtTime(7000,t+dur);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.18,t+dur); g.gain.linearRampToValueAtTime(0,t+dur+0.05);
+    chain(s,f,g,this.music); s.start(t); s.stop(t+dur+0.1);
+  }
+};
+function chain(...nodes){ for (let i = 0; i < nodes.length-1; i++) nodes[i].connect(nodes[i+1]); return nodes[nodes.length-1]; }
+// any tap re-wakes audio that the browser suspended
+['pointerdown','touchend','click'].forEach(ev => document.addEventListener(ev, () => Audio.unlock(), {passive:true}));
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function pulse(delay){
+  if (reduceMotion) return;
+  setTimeout(() => { const b = $('bellbox'); b.classList.remove('pulse'); void b.offsetWidth; b.classList.add('pulse'); }, Math.max(0, delay*1000));
+}
+
+let voiceOn = true;
+function speak(text){
+  if (!voiceOn || !('speechSynthesis' in window)) return;
+  try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang='ko-KR'; u.rate=1.05; speechSynthesis.speak(u); }catch(e){}
+}
+
+/* ---------- home music preview ---------- */
+$('previewBtn').addEventListener('click', () => {
+  Audio.init();
+  const on = $('previewBtn').getAttribute('aria-pressed') !== 'true';
+  $('previewBtn').setAttribute('aria-pressed', on);
+  $('previewBtn').textContent = on ? '■ 미리듣기 정지' : '♪ 음악 미리듣기';
+  if (on){ Audio.setMode(2, 132); Audio.start(); } else Audio.stop();
+});
+
+/* ---------- workout engine ---------- */
+const MODE = {warm:[1,118], work:[2,132], rest:[1,132], cool:[0,90]};
+const PC = {warm:'var(--warm)', work:'var(--bell)', rest:'var(--rest)', cool:'var(--cool)'};
+const PHASE_LABEL = {warm:'워밍업', main:'메인', cool:'쿨다운'};
+let run = null, loop = null, wake = null;
+
+function startWorkout(){
+  Audio.init();   // must run first, inside the tap
+  const day = DAYS.find(d => d.id === chosen);
+  const plan = buildPlan(day);
+  run = {day, plan, idx:0, segT:0, paused:false, last:performance.now(), lastWhole:null, musicOn:$('musicTog').getAttribute('aria-pressed')==='true'};
+  $('timeline').innerHTML = plan.map(s => `<span class="t-${s.t}" style="flex:${s.d}"></span>`).join('') + '<i class="now" id="now"></i>';
+  $('home').hidden = true; $('workout').hidden = false; $('done').hidden = true;
+  $('previewBtn').setAttribute('aria-pressed','false'); $('previewBtn').textContent = '♪ 음악 미리듣기';
+  Audio.init(); Audio.stop();
+  if (run.musicOn) Audio.start();
+  try{ navigator.wakeLock?.request('screen').then(l => wake = l).catch(()=>{}); }catch(e){}
+  speak(`${day.name} 시작합니다. 워밍업, ${plan[0].n}`);
+  enterSeg(0, true);
+  setPlayIcon();
+  loop = setInterval(tick, 100);
+}
+function enterSeg(i, silent){
+  run.idx = i; run.segT = 0; run.lastWhole = null;
+  const s = run.plan[i];
+  const [lvl, bpm] = MODE[s.t]; Audio.setMode(lvl, bpm);
+  document.documentElement.style.setProperty('--pc', PC[s.t]);
+  $('phase').textContent = s.t==='rest' ? '휴식' : PHASE_LABEL[s.phase];
+  $('round').textContent = s.r ? `ROUND ${s.r} / ${ROUNDS}` : (s.phase==='warm' ? 'WARM-UP' : 'COOL-DOWN');
+  $('exname').textContent = s.n;
+  $('tip').textContent = s.tip;
+  const nx0 = run.plan.slice(i+1).find(x => x.t !== 'rest');
+  if (s.t === 'rest' && nx0){ showMotion(nx0.n); $('mcap').textContent = '다음 동작 미리보기'; }
+  else { showMotion(s.n); $('mcap').textContent = '시범'; }
+  const nx = run.plan.slice(i+1).find(x => x.t !== 'rest');
+  $('next').textContent = nx ? `${nx.n} · ${nx.d}초` : '마무리';
+  [...$('timeline').querySelectorAll('span')].forEach((el,k) => el.classList.toggle('done', k < i));
+  if (!silent){
+    Audio.beep(1320, 0.25, 0.5);
+    if (s.t === 'rest') speak(nx ? `휴식. 다음은 ${nx.n}` : '휴식');
+    else if (s.t === 'work' && s === run.plan.find(x=>x.r===s.r && x.t==='work')) speak(`라운드 ${s.r}. ${s.n}`);
+    else speak(s.n);
+  }
+  render();
+}
+function tick(){
+  const now = performance.now();
+  if (!run.paused) run.segT += now - run.last;
+  run.last = now;
+  const s = run.plan[run.idx];
+  const remain = s.d - run.segT/1000;
+  if (remain <= 0){
+    if (run.idx + 1 >= run.plan.length) return finish();
+    return enterSeg(run.idx + 1);
+  }
+  $('soundFix').hidden = !(run.musicOn && Audio.ctx && !Audio.audible);
+  const whole = Math.ceil(remain);
+  if (whole !== run.lastWhole && !run.paused){
+    if (whole <= 3) Audio.beep(880, 0.12, 0.45);
+    if (whole === 4 && s.t === 'rest' && run.musicOn) Audio.riser(3.6);
+    if (whole === 10 && s.t === 'work' && s.d >= 30) speak('10초');
+    run.lastWhole = whole;
+  }
+  render();
+}
+function render(){
+  const s = run.plan[run.idx];
+  const remain = Math.max(0, s.d - run.segT/1000);
+  $('sec').textContent = Math.ceil(remain);
+  const ratio = remain / s.d;              // bell drains top→bottom
+  const top = 60, h = 150;
+  $('fill').setAttribute('y', top + h*(1-ratio));
+  const el = s.start + run.segT/1000;
+  $('elapsed').textContent = fmt(el);
+  $('now').style.left = `calc(${(el/1200*100).toFixed(2)}% - 1px)`;
+}
+function setPlayIcon(){
+  $('playIcon').innerHTML = run.paused ? '<path d="M7 4v16l13-8z"/>' : '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+  $('playBtn').setAttribute('aria-label', run.paused ? '재개' : '일시정지');
+}
+$('playBtn').addEventListener('click', () => {
+  run.paused = !run.paused; run.last = performance.now(); setPlayIcon();
+  if (run.paused) Audio.stop(); else if (run.musicOn){ Audio.init(); Audio.start(); }
+});
+$('nextBtn').addEventListener('click', () => { if (run.idx+1 < run.plan.length) enterSeg(run.idx+1); else finish(); });
+$('prevBtn').addEventListener('click', () => { enterSeg(run.segT > 3000 || run.idx === 0 ? run.idx : run.idx-1, true); });
+$('musicTog').addEventListener('click', e => {
+  const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', on);
+  if (!run) return;
+  run.musicOn = on;
+  if (on && !run.paused){ Audio.init(); Audio.start(); } else Audio.stop();
+});
+$('voiceTog').addEventListener('click', e => {
+  voiceOn = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+  e.currentTarget.setAttribute('aria-pressed', voiceOn);
+  if (!voiceOn) try{ speechSynthesis.cancel(); }catch(err){}
+});
+$('vol').addEventListener('input', e => Audio.setVol(e.target.value/100));
+
+let exitArm = null;
+$('exitBtn').addEventListener('click', () => {
+  const b = $('exitBtn');
+  if (!exitArm){
+    b.textContent = '한 번 더 누르면 종료'; b.classList.add('warn');
+    exitArm = setTimeout(() => { exitArm = null; b.textContent = '종료'; b.classList.remove('warn'); }, 3000);
+    return;
+  }
+  clearTimeout(exitArm); exitArm = null; b.textContent = '종료'; b.classList.remove('warn');
+  teardown(); $('workout').hidden = true; $('home').hidden = false; renderHome();
+});
+function teardown(){
+  clearInterval(loop); Audio.stop();
+  try{ speechSynthesis.cancel(); }catch(e){}
+  try{ wake && wake.release(); }catch(e){} wake = null;
+}
+function finish(){
+  teardown();
+  const today = iso(new Date());
+  log.push({date: today, day: run.day.id, kg});
+  store.set('log', log);
+  chosen = DAYS[log.length % 3].id;
+  const w = weekInfo();
+  const work = run.plan.filter(s => s.t==='work').reduce((a,s) => a+s.d, 0);
+  $('doneTitle').textContent = `DAY ${run.day.id} 완료`;
+  $('dWork').textContent = Math.round(work/60);
+  $('dWeek').textContent = `${w.count}/3`;
+  $('doneMsg').textContent = w.count >= 3
+    ? `이번 주 3회 달성! ${kg}kg이 가볍게 느껴지면 다음 주엔 한 단계 올려보세요.`
+    : `${kg}kg로 ${run.day.name} 완료. 다음은 DAY ${chosen}. 오늘은 물 마시고 푹 쉬세요.`;
+  $('workout').hidden = true; $('done').hidden = false;
+  Audio.beep(660,0.15,0.5); setTimeout(()=>Audio.beep(990,0.35,0.5),180);
+  speak('20분 완료. 수고하셨습니다');
+}
+$('soundFix').addEventListener('click', () => { Audio.init(); if (run && run.musicOn && !run.paused) Audio.start(); });
+$('homeBtn').addEventListener('click', () => { $('done').hidden = true; $('home').hidden = false; renderHome(); window.scrollTo(0,0); });
+$('startBtn').addEventListener('click', startWorkout);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && run && !$('workout').hidden && !wake){
+    try{ navigator.wakeLock?.request('screen').then(l => wake = l).catch(()=>{}); }catch(e){}
+  }
+});
+
+renderHome();
+renderGuide();
+requestAnimationFrame(motionLoop);
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>

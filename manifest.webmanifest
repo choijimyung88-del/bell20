@@ -1,0 +1,17 @@
+{
+  "name": "BELL 20 케틀벨",
+  "short_name": "BELL 20",
+  "description": "주 3회, 20분 케틀벨 인터벌 루틴",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#141312",
+  "theme_color": "#141312",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
