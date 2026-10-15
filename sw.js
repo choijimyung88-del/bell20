@@ -1,5 +1,5 @@
 // Offline support: app files are cached on install, Google Fonts are cached on first use.
-const CACHE = 'bell20-v4';
+const CACHE = 'bell20-v5';
 const SHELL = ['./', 'index.html', 'samples.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'maskable-512.png'];
 
 self.addEventListener('install', e => {
