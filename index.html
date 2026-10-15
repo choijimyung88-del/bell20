@@ -206,7 +206,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--bell);outline-o
 
   <button class="go" id="startBtn">운동 시작 <small id="startDay">DAY A · 20:00</small></button>
   <p class="cue">처음 3초는 비프음 카운트다운이 나옵니다. 스윙은 팔이 아니라 엉덩이로 — 비트의 킥에 맞춰 힙을 스냅하세요. 소리가 작으면 기기 볼륨(미디어 볼륨)을 올려 주세요.</p>
-  <p class="hint">음악: 페스티벌 EDM. 합창·심벌 소리는 MusyngKite 사운드폰트 녹음 샘플(CC BY-SA 3.0)입니다.</p>
+  <p class="hint">음악: 직접 만든 운동 응원가 “Ring the Bell”. 악기는 MusyngKite 사운드폰트(CC BY-SA 3.0)와 Virtuosity Drums(CC0), 보컬은 Kokoro 음성합성을 노래로 바꿔 만들었습니다.</p>
 </div>
 
 <div class="screen" id="workout" hidden>
@@ -274,7 +274,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--bell);outline-o
   </div>
 </div>
 
-<script src="samples.js"></script>
+<script src="music.js"></script>
 <script>
 (() => {
 const $ = id => document.getElementById(id);
@@ -737,29 +737,17 @@ $('progs').addEventListener('click', e => {
 
 /* ---------- audio: synthesized gym beat ---------- */
 const mtof = m => 440 * Math.pow(2, (m-69)/12);
-const PROG = [            // A minor festival progression: vi – IV – I – V
-  {root:33, tri:[57,60,64], arp:[57,60,64,69]},   // Am
-  {root:29, tri:[57,60,65], arp:[53,57,60,65]},   // F
-  {root:36, tri:[55,60,64], arp:[55,60,64,67]},   // C
-  {root:31, tri:[55,59,62], arp:[55,59,62,67]}    // G
-];
-const ARP = [0,1,2,3, 2,3,1,2, 0,1,2,3, 2,1,3,2];
-// drop lead, one bar per chord: [16th step, midi, length in 16ths]
-const LEAD = [
-  [[0,76,2],[3,76,1],[4,79,2],[6,76,2],[8,74,2],[10,72,2],[12,74,4]],
-  [[0,72,2],[3,72,1],[4,77,2],[6,76,2],[8,72,2],[10,69,2],[12,72,4]],
-  [[0,72,2],[3,72,1],[4,76,2],[6,79,2],[8,79,2],[10,76,2],[12,74,4]],
-  [[0,74,2],[3,74,1],[4,79,2],[6,79,2],[8,81,2],[10,79,2],[12,76,4]]
-];
+/* Workout anthem: pre-produced sections (rock band, brass, sung hook) decoded once and looped per phase.
+   Each loop file carries 0.5 s of circular padding on both sides so the loop seam is sample-continuous. */
 const Audio = {
-  ctx:null, on:false, level:'drop', bpm:128, step:0, next:0, timer:null, vol:0.7,
+  ctx:null, on:false, vol:0.7, tracks:{}, want:'work', cur:null, curName:null, curStart:0, bpm:120, beatEvery:1,
   init(){
     if (this.ctx) { this.unlock(); return; }
     const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
     const ctx = this.ctx = new C();
     // iPhone: play through the media channel so the silent switch doesn't mute the music
     try{ if (navigator.audioSession) navigator.audioSession.type = 'playback'; }catch(e){}
-    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -8; comp.ratio.value = 3;
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (isIOS && !navigator.audioSession && ctx.createMediaStreamDestination){
       const dest = ctx.createMediaStreamDestination(); comp.connect(dest);
@@ -768,17 +756,9 @@ const Audio = {
       document.body.appendChild(el);
       const p = el.play(); if (p && p.catch) p.catch(() => { this.el = null; comp.connect(ctx.destination); });
     } else comp.connect(ctx.destination);
-    this.music = ctx.createGain(); this.music.gain.value = this.vol * 0.8; this.music.connect(comp);
-    const verb = ctx.createConvolver(), wet = ctx.createGain(); wet.gain.value = .34;
-    const ir = ctx.createBuffer(2, Math.floor(ctx.sampleRate*2.8), ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++){ const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1)*Math.pow(1-i/d.length, 3.2); }
-    verb.buffer = ir; this.music.connect(wet); wet.connect(verb); verb.connect(comp);
-    this.duck = ctx.createGain(); this.duck.connect(this.music);            // everything but the kick pumps through this
-    this.shaper = ctx.createWaveShaper();
-    const curve = new Float32Array(1024); for (let i = 0; i < 1024; i++){ const x = i/511.5 - 1; curve[i] = Math.tanh(2.6*x); }
-    this.shaper.curve = curve; this.shaper.connect(this.music);
+    this.music = ctx.createGain(); this.music.gain.value = this.vol; this.music.connect(comp);
     this.sfx = ctx.createGain(); this.sfx.gain.value = 0.55; this.sfx.connect(comp);
-    this.loadSamples();
+    this.loadTracks();
     this.unlock();
   },
   unlock(){
@@ -790,188 +770,83 @@ const Audio = {
     }catch(e){}
   },
   get audible(){ return !!this.ctx && this.ctx.state === 'running'; },
-  setVol(v){ this.vol = v; if (this.music) this.music.gain.setTargetAtTime(v*0.8, this.ctx.currentTime, 0.05); },
+  setVol(v){ this.vol = v; if (this.music) this.music.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05); },
+  loadTracks(){
+    if (this.loading || typeof MUSIC === 'undefined') return;
+    this.loading = true;
+    Object.entries(MUSIC).forEach(([name, t]) => {
+      const bin = atob(t.mp3), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const ok = buf => {
+        this.tracks[name] = {buf, loop:t.loop};
+        if (this.on && !this.cur && this.want === name) this.play(name, 0.4);   // decoded after Start was tapped
+      };
+      try{ const p = this.ctx.decodeAudioData(u8.buffer, ok, () => {}); if (p && p.catch) p.catch(() => {}); }catch(e){}
+    });
+  },
   start(){
     if (!this.ctx || this.on) return;
-    this.on = true; this.step = 0; this.next = this.ctx.currentTime + 0.06;
-    this.timer = setInterval(() => this.schedule(), 25);
+    this.on = true; this.play(this.want, 0.3);
+    clearInterval(this.beatTimer); this.lastBeat = -1;
+    this.beatTimer = setInterval(() => this.beatTick(), 40);
   },
-  stop(){ this.on = false; clearInterval(this.timer); },
-  setMode(level, bpm){ this.level = level; this.bpm = bpm; },
-  schedule(){
-    const now = this.ctx.currentTime;
-    if (this.next < now - 0.2) this.next = now + 0.05;   // catch up after a stall instead of bursting notes
+  stop(){
+    this.on = false; clearInterval(this.beatTimer);
+    this.fadeOut(this.cur, 0.2); this.fadeOut(this.build, 0.2); this.cur = this.build = null; this.curName = null;
+  },
+  setMode(name, bpm){
+    this.want = name; this.bpm = bpm; this.beatEvery = name === 'rest' ? 2 : 1;
+    if (this.on && name !== this.curName) this.play(name, this.build ? 0.01 : 0.35);
+  },
+  play(name, fade){
+    const tr = this.tracks[name];
+    this.fadeOut(this.cur, 0.4); this.cur = null; this.curName = name;
+    if (this.build && name === 'work'){ this.build = null; }                 // the build-up hands over to the drop
+    if (!tr) return;                                                           // still decoding; loadTracks starts it
+    const c = this.ctx, t = c.currentTime + 0.03, s = c.createBufferSource(), g = c.createGain();
+    s.buffer = tr.buf;
+    if (tr.loop){ s.loop = true; s.loopStart = 0.5; s.loopEnd = 0.5 + tr.loop; }
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1, t + Math.max(0.01, fade));
+    s.connect(g); g.connect(this.music); s.start(t, tr.loop ? 0.5 : 0);
+    this.cur = {s, g}; this.curStart = t; this.lastBeat = -1;
+  },
+  fadeOut(n, d){
+    if (!n) return;
     try{
-      while (this.next < now + 0.12){
-        this.play(this.step, this.next);
-        this.next += 60 / this.bpm / 4; this.step++;
-      }
-    }catch(e){ this.next += 60 / this.bpm / 4; this.step++; }
+      const t = this.ctx.currentTime; n.g.gain.cancelScheduledValues(t);
+      n.g.gain.setValueAtTime(Math.max(0.0001, n.g.gain.value), t); n.g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      n.s.stop(t + d + 0.05);
+    }catch(e){}
   },
-  env(g, t, a, peak, rel){ g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t+a); g.gain.exponentialRampToValueAtTime(0.0001, t+a+rel); },
+  beatTick(){                                     // drive the bell's thump from the playing loop's beat grid
+    if (!this.cur || !this.ctx) return;
+    const b = Math.floor((this.ctx.currentTime - this.curStart) / (60 / this.bpm * this.beatEvery));
+    if (b !== this.lastBeat && b >= 0){ this.lastBeat = b; if (this.curName !== 'cool') pulse(0); }
+  },
+  drop(){},                                       // the work loop opens with its own crash
   tone(t, midi, dur, v, wave, cutoff, out){
     const c=this.ctx, o=c.createOscillator(), f=c.createBiquadFilter(), g=c.createGain();
     o.type=wave; o.frequency.value=mtof(midi);
     f.type='lowpass'; f.frequency.setValueAtTime(cutoff, t); f.frequency.exponentialRampToValueAtTime(Math.max(120, cutoff*0.3), t+dur);
-    this.env(g, t, 0.006, v, dur);
-    chain(o,f,g,out||this.music); o.start(t); o.stop(t+dur+0.05);
-  },
-  /* ---- recorded orchestra (MusyngKite samples, pitch-shifted to the nearest note) ---- */
-  buffers:{},
-  loadSamples(){
-    if (this.loading || typeof SAMPLES === 'undefined') return;
-    this.loading = true;
-    Object.entries(SAMPLES).forEach(([inst, notes]) => {
-      this.buffers[inst] = {};
-      Object.entries(notes).forEach(([m, b64]) => {
-        const bin = atob(b64), u8 = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-        const ok = buf => { this.buffers[inst][m] = buf; };
-        try{ const p = this.ctx.decodeAudioData(u8.buffer, ok, () => {}); if (p && p.catch) p.catch(() => {}); }catch(e){}
-      });
-    });
-  },
-  nearest(inst, midi){
-    const set = this.buffers[inst]; if (!set) return null;
-    let best = null, bd = 1e9;
-    for (const k in set){ const d = Math.abs(k - midi); if (d < bd){ bd = d; best = +k; } }
-    return best === null ? null : {buf:set[best], rate:Math.pow(2, (midi-best)/12)};
-  },
-  // o: attack, release (s), offset into the sample (skips mp3 encoder padding)
-  sample(inst, midi, t, dur, v, o){
-    o = o || {}; const n = this.nearest(inst, midi); if (!n) return;
-    v *= 4;                                       // the soundfont is mastered quietly
-    const c = this.ctx, s = c.createBufferSource(), g = c.createGain();
-    s.buffer = n.buf; s.playbackRate.value = n.rate;
-    const a = o.attack || 0.004, r = Math.min(o.release || 0.12, dur*0.6), end = t + dur;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t+a);
-    g.gain.setValueAtTime(v, Math.max(t+a, end-r)); g.gain.exponentialRampToValueAtTime(0.0001, end);
-    s.connect(g); g.connect(this.duck);
-    s.start(t, o.offset == null ? 0.025 : o.offset); s.stop(end + 0.05);
-  },
-  chord(inst, notes, t, dur, v, o){ notes.forEach(m => this.sample(inst, m, t, dur, v, o)); },
-  /* ---- EDM voices ---- */
-  noiseBuf(){
-    if (!this.noise){ const c = this.ctx, b = c.createBuffer(1, c.sampleRate, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2-1; this.noise = b; }
-    return this.noise;
-  },
-  hit(t, type, f, q, v, dur, out){
-    const c=this.ctx, s=c.createBufferSource(), fl=c.createBiquadFilter(), g=c.createGain();
-    s.buffer=this.noiseBuf(); fl.type=type; fl.frequency.value=f; fl.Q.value=q;
-    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-    chain(s, fl, g, out||this.music); s.start(t, Math.random()*0.5); s.stop(t+dur+0.02);
-  },
-  pump(t, depth){
-    const g = this.duck.gain; g.cancelScheduledValues(t);
-    g.setValueAtTime(depth, t); g.setTargetAtTime(1, t+0.03, 0.075);
-  },
-  kick(t, v, depth){
-    const c=this.ctx, o=c.createOscillator(), g=c.createGain();
-    o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(52, t+0.07); o.frequency.exponentialRampToValueAtTime(42, t+0.35);
-    g.gain.setValueAtTime(v, t); g.gain.setValueAtTime(v, t+0.05); g.gain.exponentialRampToValueAtTime(0.0001, t+0.45);
-    chain(o, g, this.shaper); o.start(t); o.stop(t+0.5);
-    this.hit(t, 'highpass', 2500, 0.7, v*0.45, 0.014);
-    if (depth != null) this.pump(t, depth);
-    pulse(t - this.ctx.currentTime);
-  },
-  clap(t, v){ [0, 0.011, 0.023].forEach((o,i) => this.hit(t+o, 'bandpass', 1500, 1.1, v*(i===2?1:0.65), i===2?0.2:0.025)); },
-  hat(t, v, open){ this.hit(t, 'highpass', open ? 7000 : 9000, 0.7, v, open ? 0.24 : 0.035, this.duck); },
-  supersaw(t, notes, dur, v, cutoff, o){
-    o = o || {};
-    const c=this.ctx, f=c.createBiquadFilter(), g=c.createGain(), a=o.attack||0.012, r=Math.min(o.release||0.15, dur*0.5);
-    f.type='lowpass'; f.Q.value=0.8; f.frequency.setValueAtTime(cutoff, t);
-    if (o.sweepTo) f.frequency.exponentialRampToValueAtTime(o.sweepTo, t+dur);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t+a);
-    g.gain.setValueAtTime(v, Math.max(t+a, t+dur-r)); g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-    chain(f, g, this.duck);
-    const det = [-22,-13,-6,0,6,13,22], per = 1/(det.length*notes.length)*2.2;
-    notes.forEach(m => det.forEach(d => {
-      const osc=c.createOscillator(), vg=c.createGain(); osc.type='sawtooth'; osc.frequency.value=mtof(m); osc.detune.value=d + (Math.random()-.5)*4; vg.gain.value=per;
-      if (c.createStereoPanner){ const p=c.createStereoPanner(); p.pan.value=d/26; chain(osc, vg, p, f); } else chain(osc, vg, f);
-      osc.start(t); osc.stop(t+dur+0.05);
-    }));
-  },
-  pluck(t, m, dur, v){
-    const c=this.ctx, f=c.createBiquadFilter(), g=c.createGain();
-    f.type='lowpass'; f.Q.value=3; f.frequency.setValueAtTime(4200, t); f.frequency.exponentialRampToValueAtTime(380, t+0.2);
-    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-    chain(f, g, this.duck);
-    [-8, 8].forEach(d => { const o=c.createOscillator(); o.type='sawtooth'; o.frequency.value=mtof(m); o.detune.value=d; o.connect(f); o.start(t); o.stop(t+dur+0.05); });
-  },
-  bass(t, m, dur, v, cutoff){
-    const c=this.ctx, f=c.createBiquadFilter(), g=c.createGain(), o=c.createOscillator(), sub=c.createOscillator(), sg=c.createGain();
-    f.type='lowpass'; f.Q.value=5; f.frequency.setValueAtTime(cutoff||900, t); f.frequency.exponentialRampToValueAtTime(220, t+dur);
-    o.type='sawtooth'; o.frequency.value=mtof(m); sub.type='sine'; sub.frequency.value=mtof(m-12); sg.gain.value=0.9;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t+0.008); g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-    chain(o, f, g, this.duck); chain(sub, sg, g);
-    o.start(t); sub.start(t); o.stop(t+dur+0.05); sub.stop(t+dur+0.05);
-  },
-  crash(t, v){ this.hit(t, 'highpass', 4500, 0.6, v, 1.9); },
-  drop(){                                         // impact + crash + choir when a work set starts
-    if (!this.ctx || !this.on) return;
-    const c=this.ctx, t=c.currentTime+0.02, o=c.createOscillator(), g=c.createGain();
-    o.frequency.setValueAtTime(80, t); o.frequency.exponentialRampToValueAtTime(28, t+1.4);
-    g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.0001, t+1.6);
-    chain(o, g, this.music); o.start(t); o.stop(t+1.7);
-    this.crash(t, 0.4);
-    this.chord('choir', PROG[0].tri, t, 2.2, 0.16, {attack:.02, release:.8});
-  },
-  play(s, t){
-    const bar = Math.floor(s/16), st = s%16, ch = PROG[bar%4], L = this.level, sp = 60/this.bpm/4;
-    if (L === 'drop'){                              // main set: four-on-the-floor, pumping supersaws, lead
-      if (st%4===0) this.kick(t, 1, 0.22);
-      if (st===4 || st===12) this.clap(t, 0.55);
-      if (st%2===1) this.hat(t, 0.07, false);
-      if (st%4===2){ this.hat(t, 0.15, true); this.bass(t, ch.root+12, sp*1.8, 0.5, 1000); }
-      if (st===0){
-        this.supersaw(t, ch.tri, sp*16, 0.1, 3800);
-        this.chord('choir', ch.tri, t, sp*16, 0.1, {attack:.05, release:.5});
-        if (bar%8===0) this.crash(t, 0.22);
-      }
-      if (bar%8 < 4) this.pluck(t, ch.arp[ARP[st]]+12, sp*1.6, 0.16);
-      else LEAD[bar%4].forEach(([k, m, len]) => { if (k===st){ this.supersaw(t, [m], sp*len*0.95, 0.14, 5200, {release:.05}); this.pluck(t, m+12, sp*len, 0.05); } });
-    } else if (L === 'groove'){                     // warm-up: filtered groove
-      if (st%4===0) this.kick(t, 0.75, 0.45);
-      if (st===12) this.clap(t, 0.28);
-      if (st%4===2){ this.hat(t, 0.1, true); this.bass(t, ch.root+12, sp*1.6, 0.35, 600); }
-      if (st%2===0) this.pluck(t, ch.arp[ARP[st]]+12, sp*1.4, 0.1);
-      if (st===0) this.supersaw(t, ch.tri, sp*16, 0.05, 1100, {attack:.2, release:.4});
-    } else if (L === 'break'){                      // rest: breakdown, no drums, big pads + choir
-      if (st===0){
-        this.supersaw(t, ch.tri, sp*16, 0.08, 900, {attack:.35, release:.5, sweepTo:2200});
-        this.chord('choir', ch.tri, t, sp*16, 0.13, {attack:.3, release:.6});
-        this.bass(t, ch.root+12, sp*15, 0.25, 300);
-      }
-      this.pluck(t, ch.arp[ARP[st]]+12, sp*1.4, 0.09);
-    } else {                                        // cool-down: soft pad + slow pluck
-      if (st===0){ this.supersaw(t, ch.tri, sp*16, 0.045, 800, {attack:.6, release:.8}); this.chord('choir', ch.tri, t, sp*16, 0.08, {attack:.5, release:.8}); }
-      if (st%4===0) this.pluck(t, ch.arp[(st/4)%4]+12, sp*4, 0.08);
-    }
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t+0.006); g.gain.exponentialRampToValueAtTime(0.0001, t+0.006+dur);
+    chain(o, f, g, out||this.music); o.start(t); o.stop(t+dur+0.05);
   },
   beep(freq, dur, v){
     if (!this.ctx) return; const t = this.ctx.currentTime;
     this.tone(t, 69 + 12*Math.log2(freq/440), dur, v||0.5, 'square', 3000, this.sfx);
   },
-  riser(dur){                                     // build-up: accelerating snare roll, noise sweep, pitch riser, reverse cymbal
+  riser(dur){                                     // build-up clip timed to end exactly when the rest ends
     if (!this.ctx || !this.on) return;
-    const c=this.ctx, t0=c.currentTime;
-    for (let x = 0; x < dur; ){
-      const p = x/dur; this.clap(t0+x, 0.12 + 0.45*p);
-      x += p < .5 ? 0.25 : p < .8 ? 0.125 : 0.0625;
-    }
-    const s=c.createBufferSource(), f=c.createBiquadFilter(), g=c.createGain();
-    s.buffer=this.noiseBuf(); s.loop=true; f.type='bandpass'; f.Q.value=2;
-    f.frequency.setValueAtTime(400, t0); f.frequency.exponentialRampToValueAtTime(9000, t0+dur);
-    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.22, t0+dur); g.gain.linearRampToValueAtTime(0, t0+dur+0.05);
-    chain(s, f, g, this.music); s.start(t0); s.stop(t0+dur+0.1);
-    const o=c.createOscillator(), og=c.createGain(); o.type='sawtooth';
-    o.frequency.setValueAtTime(110, t0); o.frequency.exponentialRampToValueAtTime(880, t0+dur);
-    og.gain.setValueAtTime(0.0001, t0); og.gain.exponentialRampToValueAtTime(0.06, t0+dur); og.gain.linearRampToValueAtTime(0, t0+dur+0.03);
-    chain(o, og, this.music); o.start(t0); o.stop(t0+dur+0.05);
-    const n = this.nearest('cymbal', 60);
-    if (n){ const len = n.buf.duration - 0.03; this.sample('cymbal', 60, Math.max(t0, t0+dur-len), Math.min(len, dur), 0.35, {attack:.01, release:.05}); }
+    const tr = this.tracks.build; if (!tr) return;
+    const c = this.ctx, t = c.currentTime + 0.01, s = c.createBufferSource(), g = c.createGain();
+    s.buffer = tr.buf; g.gain.value = 1; s.connect(g); g.connect(this.music);
+    const off = Math.max(0, tr.buf.duration - dur);
+    s.start(t, off);
+    this.fadeOut(this.cur, Math.min(0.8, dur)); this.cur = null;
+    this.build = {s, g};
   }
 };
+
 function chain(...nodes){ for (let i = 0; i < nodes.length-1; i++) nodes[i].connect(nodes[i+1]); return nodes[nodes.length-1]; }
 // any tap re-wakes audio that the browser suspended
 ['pointerdown','touchend','click'].forEach(ev => document.addEventListener(ev, () => Audio.unlock(), {passive:true}));
@@ -993,11 +868,11 @@ $('previewBtn').addEventListener('click', () => {
   const on = $('previewBtn').getAttribute('aria-pressed') !== 'true';
   $('previewBtn').setAttribute('aria-pressed', on);
   $('previewBtn').textContent = on ? '■ 미리듣기 정지' : '♪ 음악 미리듣기';
-  if (on){ Audio.setMode('drop', 128); Audio.start(); } else Audio.stop();
+  if (on){ Audio.setMode('work', 120); Audio.start(); } else Audio.stop();
 });
 
 /* ---------- workout engine ---------- */
-const MODE = {warm:['groove',122], work:['drop',128], rest:['break',128], cool:['chill',100]};
+const MODE = {warm:['warm',120], work:['work',120], rest:['rest',120], cool:['cool',84]};
 const PC = {warm:'var(--warm)', work:'var(--bell)', rest:'var(--rest)', cool:'var(--cool)'};
 const PHASE_LABEL = {warm:'워밍업', main:'메인', cool:'쿨다운'};
 let run = null, loop = null, wake = null;
@@ -1056,7 +931,7 @@ function tick(){
   const whole = Math.ceil(remain);
   if (whole !== run.lastWhole && !run.paused){
     if (whole <= 3) Audio.beep(880, 0.12, 0.45);
-    if (whole === 4 && s.t === 'rest' && run.musicOn) Audio.riser(3.6);
+    if (whole === 4 && s.t === 'rest' && run.musicOn) Audio.riser(remain);
     if (whole === 10 && s.t === 'work' && s.d >= 30) speak('10초');
     run.lastWhole = whole;
   }
