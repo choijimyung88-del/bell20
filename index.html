@@ -740,7 +740,7 @@ const mtof = m => 440 * Math.pow(2, (m-69)/12);
 /* Workout anthem: pre-produced sections (rock band, brass, sung hook) decoded once and looped per phase.
    Each loop file carries 0.5 s of circular padding on both sides so the loop seam is sample-continuous. */
 const Audio = {
-  ctx:null, on:false, vol:0.7, tracks:{}, want:'work', cur:null, curName:null, curStart:0, bpm:120, beatEvery:1,
+  ctx:null, on:false, vol:0.7,
   init(){
     if (this.ctx) { this.unlock(); return; }
     const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
@@ -758,7 +758,6 @@ const Audio = {
     } else comp.connect(ctx.destination);
     this.music = ctx.createGain(); this.music.gain.value = this.vol; this.music.connect(comp);
     this.sfx = ctx.createGain(); this.sfx.gain.value = 0.55; this.sfx.connect(comp);
-    this.loadTracks();
     this.unlock();
   },
   unlock(){
@@ -770,58 +769,71 @@ const Audio = {
     }catch(e){}
   },
   get audible(){ return !!this.ctx && this.ctx.state === 'running'; },
-  setVol(v){ this.vol = v; if (this.music) this.music.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05); },
-  loadTracks(){
-    if (this.loading || typeof MUSIC === 'undefined') return;
-    this.loading = true;
+  setVol(v){ this.vol = v; Object.values(this.els).forEach(el => { try{ el.volume = v; }catch(e){} }); },
+  /* Music plays through plain <audio> elements: on iPhone they keep playing with the silent switch on and
+     while the screen is locked, and they show up on the lock screen. (iOS ignores element.volume; use the side buttons.) */
+  els:{}, want:'work', cur:null, curName:null, build:null, bpm:120, beatEvery:1, blocked:false,
+  makeEls(){
+    if (this.elsReady || typeof MUSIC === 'undefined') return;
+    this.elsReady = true;
+    const probe = new window.Audio();
+    const aac = !!probe.canPlayType && probe.canPlayType('audio/mp4; codecs="mp4a.40.2"') !== '';   // gapless loops where supported
     Object.entries(MUSIC).forEach(([name, t]) => {
-      const bin = atob(t.mp3), u8 = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      const ok = buf => {
-        this.tracks[name] = {buf, loop:t.loop};
-        if (this.on && !this.cur && this.want === name) this.play(name, 0.4);   // decoded after Start was tapped
-      };
-      try{ const p = this.ctx.decodeAudioData(u8.buffer, ok, () => {}); if (p && p.catch) p.catch(() => {}); }catch(e){}
+      const el = new window.Audio();
+      el.src = aac ? t.m4a : t.mp3; el.preload = 'auto'; el.loop = name !== 'build'; el.volume = this.vol;
+      el.setAttribute('playsinline', ''); el.setAttribute('webkit-playsinline', '');
+      this.els[name] = el;
+    });
+    try{
+      if ('mediaSession' in navigator && window.MediaMetadata){
+        navigator.mediaSession.metadata = new MediaMetadata({title:'Ring the Bell', artist:'BELL 20 케틀벨', album:'20분 루틴',
+          artwork:[{src:'icon-512.png', sizes:'512x512', type:'image/png'}]});
+      }
+    }catch(e){}
+  },
+  // first tap: start every element muted once so later script-driven play() calls are allowed on iOS
+  unlockEls(skip){
+    Object.entries(this.els).forEach(([name, el]) => {
+      if (name === skip || el._unlocked) return;
+      el.muted = true;
+      const p = el.play();
+      const done = () => { if (this.curName !== name && (!this.build || this.build.el !== el)){ el.pause(); el.currentTime = 0; } el.muted = false; el._unlocked = true; };
+      if (p && p.then) p.then(done, () => { el.muted = false; }); else done();
     });
   },
   start(){
-    if (!this.ctx || this.on) return;
-    this.on = true; this.play(this.want, 0.3);
+    this.makeEls();
+    if (this.on) return;
+    this.on = true; this.play(this.want);
+    this.unlockEls(this.want);
     clearInterval(this.beatTimer); this.lastBeat = -1;
     this.beatTimer = setInterval(() => this.beatTick(), 40);
   },
   stop(){
     this.on = false; clearInterval(this.beatTimer);
-    this.fadeOut(this.cur, 0.2); this.fadeOut(this.build, 0.2); this.cur = this.build = null; this.curName = null;
+    Object.values(this.els).forEach(el => { try{ el.pause(); }catch(e){} });
+    this.cur = null; this.curName = null; this.build = null;
   },
   setMode(name, bpm){
     this.want = name; this.bpm = bpm; this.beatEvery = name === 'rest' ? 2 : 1;
-    if (this.on && name !== this.curName) this.play(name, this.build ? 0.01 : 0.35);
+    if (this.on && name !== this.curName) this.play(name);
   },
-  play(name, fade){
-    const tr = this.tracks[name];
-    this.fadeOut(this.cur, 0.4); this.cur = null; this.curName = name;
-    if (this.build && name === 'work'){ this.build = null; }                 // the build-up hands over to the drop
-    if (!tr) return;                                                           // still decoding; loadTracks starts it
-    const c = this.ctx, t = c.currentTime + 0.03, s = c.createBufferSource(), g = c.createGain();
-    s.buffer = tr.buf;
-    if (tr.loop){ s.loop = true; s.loopStart = 0.5; s.loopEnd = 0.5 + tr.loop; }
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(1, t + Math.max(0.01, fade));
-    s.connect(g); g.connect(this.music); s.start(t, tr.loop ? 0.5 : 0);
-    this.cur = {s, g}; this.curStart = t; this.lastBeat = -1;
+  play(name){
+    const el = this.els[name]; if (!el) return;
+    if (this.cur && this.cur !== el) this.cur.pause();
+    if (this.build && name === 'work'){ this.build.el.pause(); this.build = null; }   // the build-up hands over to the drop
+    this.cur = el; this.curName = name; this.lastBeat = -1;
+    try{ el.currentTime = 0; }catch(e){}
+    el.muted = false; el.volume = this.vol;
+    const p = el.play();
+    if (p && p.then) p.then(() => { this.blocked = false; el._unlocked = true; }, () => { this.blocked = true; });
+    try{ if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; }catch(e){}
   },
-  fadeOut(n, d){
-    if (!n) return;
-    try{
-      const t = this.ctx.currentTime; n.g.gain.cancelScheduledValues(t);
-      n.g.gain.setValueAtTime(Math.max(0.0001, n.g.gain.value), t); n.g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-      n.s.stop(t + d + 0.05);
-    }catch(e){}
-  },
-  beatTick(){                                     // drive the bell's thump from the playing loop's beat grid
-    if (!this.cur || !this.ctx) return;
-    const b = Math.floor((this.ctx.currentTime - this.curStart) / (60 / this.bpm * this.beatEvery));
-    if (b !== this.lastBeat && b >= 0){ this.lastBeat = b; if (this.curName !== 'cool') pulse(0); }
+  retry(){ this.blocked = false; if (this.on && this.cur){ const p = this.cur.play(); if (p && p.catch) p.catch(() => { this.blocked = true; }); } },
+  beatTick(){                                     // drive the bell's thump from the playing track's position
+    const el = this.cur; if (!el || el.paused) return;
+    const b = Math.floor(el.currentTime / (60 / this.bpm * this.beatEvery));
+    if (b !== this.lastBeat){ this.lastBeat = b; if (this.curName !== 'cool') pulse(0); }
   },
   drop(){},                                       // the work loop opens with its own crash
   tone(t, midi, dur, v, wave, cutoff, out){
@@ -835,15 +847,15 @@ const Audio = {
     if (!this.ctx) return; const t = this.ctx.currentTime;
     this.tone(t, 69 + 12*Math.log2(freq/440), dur, v||0.5, 'square', 3000, this.sfx);
   },
-  riser(dur){                                     // build-up clip timed to end exactly when the rest ends
-    if (!this.ctx || !this.on) return;
-    const tr = this.tracks.build; if (!tr) return;
-    const c = this.ctx, t = c.currentTime + 0.01, s = c.createBufferSource(), g = c.createGain();
-    s.buffer = tr.buf; g.gain.value = 1; s.connect(g); g.connect(this.music);
-    const off = Math.max(0, tr.buf.duration - dur);
-    s.start(t, off);
-    this.fadeOut(this.cur, Math.min(0.8, dur)); this.cur = null;
-    this.build = {s, g};
+  riser(dur){                                     // build-up clip, offset so it ends exactly when the rest ends
+    if (!this.on) return;
+    const el = this.els.build; if (!el) return;
+    if (this.cur) this.cur.pause();
+    this.cur = null; this.curName = 'build';
+    try{ el.currentTime = Math.max(0, (el.duration || 4) - dur); }catch(e){}
+    el.muted = false; el.volume = this.vol;
+    const p = el.play(); if (p && p.catch) p.catch(() => {});
+    this.build = {el};
   }
 };
 
@@ -927,7 +939,7 @@ function tick(){
     if (run.idx + 1 >= run.plan.length) return finish();
     return enterSeg(run.idx + 1);
   }
-  $('soundFix').hidden = !(run.musicOn && Audio.ctx && !Audio.audible);
+  $('soundFix').hidden = !(run.musicOn && (Audio.blocked || (Audio.ctx && !Audio.audible)));
   const whole = Math.ceil(remain);
   if (whole !== run.lastWhole && !run.paused){
     if (whole <= 3) Audio.beep(880, 0.12, 0.45);
@@ -1006,7 +1018,7 @@ function finish(){
   Audio.beep(660,0.15,0.5); setTimeout(()=>Audio.beep(990,0.35,0.5),180);
   speak('20분 완료. 수고하셨습니다');
 }
-$('soundFix').addEventListener('click', () => { Audio.init(); if (run && run.musicOn && !run.paused) Audio.start(); });
+$('soundFix').addEventListener('click', () => { Audio.init(); if (run && run.musicOn && !run.paused){ Audio.start(); Audio.retry(); } });
 $('homeBtn').addEventListener('click', () => { $('done').hidden = true; $('home').hidden = false; renderHome(); window.scrollTo(0,0); });
 $('startBtn').addEventListener('click', startWorkout);
 document.addEventListener('visibilitychange', () => {
