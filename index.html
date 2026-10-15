@@ -356,7 +356,7 @@ function setBellColor(){
    angles in degrees. t = torso from vertical (+ = leaning forward).
    ua/fa/th/sh = upper arm, forearm, thigh, shin measured from straight down (+ = forward).
    limb 1 = near side (bright), limb 2 = far side (dim). plant:1 keeps foot 1 on the floor. */
-const BASE = {plant:1, ax:0, hx:0, hy:0, t:0, ua1:0,fa1:0,ua2:0,fa2:0, th1:0,sh1:0,th2:0,sh2:0, f1:0,f2:0, bell:'none', bx:0, glow:0};
+const BASE = {plant:1, ax:0, hx:0, hy:0, t:0, ua1:0,fa1:0,ua2:0,fa2:0, th1:0,sh1:0,th2:0,sh2:0, f1:0,f2:0, bell:'none', bx:0, glow:0, face:1};
 const legs = (th, sh) => ({th1:th, sh1:sh, th2:th, sh2:sh});
 const arms = (ua, fa) => ({ua1:ua, fa1:fa, ua2:ua, fa2:fa});
 const SW_BACK = {t:55, ...legs(25,-5), ...arms(-35,-35)};
@@ -366,9 +366,9 @@ const HINGE   = {t:62, ...legs(25,-5)};
 const GOB_UP  = {...arms(20,160), bell:'hold'};
 const GOB_DN  = {t:35, ...legs(80,-30), ...arms(35,175), bell:'hold'};
 const PLANK   = {plant:0, hx:0, hy:47.5, t:75, ...legs(-59,-59), f1:-70, f2:-70, bell:'floor'};
-const TGU     = {plant:0, hx:0, hy:8, t:90, th1:-135, sh1:-45, th2:-90, sh2:-90, f2:90, ua1:180, fa1:180, ua2:-80, fa2:-80, bell:'rack'};
+const TGU     = {plant:0, hx:0, hy:8, t:90, th1:-135, sh1:-45, th2:-90, sh2:-90, f2:90, ua1:180, fa1:180, ua2:-80, fa2:-80, bell:'rack', face:-1};
 const QUAD    = {plant:0, hx:0, hy:46, t:75, ...legs(0,-90), f1:180, f2:180, ua2:0, fa2:0};
-const SUPINE  = {plant:0, hx:0, hy:8, t:90, th1:-135, sh1:-45, th2:-128, sh2:-52, ...arms(-120,-90)};
+const SUPINE  = {plant:0, hx:0, hy:8, t:90, th1:-135, sh1:-45, th2:-128, sh2:-52, ...arms(-120,-90), face:-1};
 const MOTIONS = {
   swing:   {q:'two hand kettlebell swing technique', f:[[{...SW_BACK,bell:'h12'},.45],[{...SW_MID,bell:'h12'},.25],[{...SW_TOP,bell:'h12'},.45],[{...SW_MID,bell:'h12'},.3]]},
   swing1:  {q:'one arm kettlebell swing technique', f:[[{...SW_BACK,ua2:-20,fa2:-20,bell:'h1'},.45],[{...SW_MID,ua2:10,fa2:10,bell:'h1'},.25],[{...SW_TOP,ua2:50,fa2:55,bell:'h1'},.45],[{...SW_MID,ua2:10,fa2:10,bell:'h1'},.3]]},
@@ -449,11 +449,11 @@ function prepMotion(key){
     for (let s = 0; s < 40; s++){                       // sample the loop for a stable frame box
       const J = joints(poseAt(M, M.total*s/40));
       const pts = [J.hip,J.knee1,J.ank1,J.toe1,J.knee2,J.ank2,J.toe2,J.sh,J.el1,J.hd1,J.el2,J.hd2];
-      pts.push([J.head[0]-9,J.head[1]-9],[J.head[0]+9,J.head[1]+9]);
+      pts.push([J.head[0]-16,J.head[1]-16],[J.head[0]+16,J.head[1]+16]);
       if (J.bell) pts.push([J.bell.c[0]-10,J.bell.c[1]-10],[J.bell.c[0]+10,J.bell.c[1]+10]);
       pts.forEach(([x,y]) => { x0=Math.min(x0,x); x1=Math.max(x1,x); y0=Math.min(y0,y); y1=Math.max(y1,y); });
     }
-    M.box = [x0-12, Math.min(y0,0)-6, x1+12, y1+10];
+    M.box = [x0-14, Math.min(y0,0)-8, x1+14, y1+10];
   }
   return M;
 }
@@ -484,32 +484,126 @@ function drawStage(st, time){
   const ox = (W - (x1-x0)*s)/2, oy = (H - (y1-y0)*s)/2;
   g.setTransform(st.mirror ? -s : s, 0, 0, -s, st.mirror ? W-ox+x0*s : ox - x0*s, H - oy + y0*s);
   g.lineCap = 'round'; g.lineJoin = 'round';
-  // floor
-  g.strokeStyle = palette['--line']; g.lineWidth = 2/s;
-  g.beginPath(); g.moveTo(x0-200, 0); g.lineTo(x1+200, 0); g.stroke();
   const p = poseAt(M, time), J = joints(p);
-  const seg = (pts, w, c) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.moveTo(...pts[0]); pts.slice(1).forEach(q => g.lineTo(...q)); g.stroke(); };
-  const far = palette['--dust'], near = palette['--chalk'];
-  g.globalAlpha = .55;
-  seg([J.hip,J.knee2,J.ank2,J.toe2], 8, far);
-  seg([J.sh,J.el2,J.hd2], 7, far);
-  g.globalAlpha = 1;
+  // gym floor: rubber mat, edge line, soft contact shadow
+  g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(x0-200, -80, x1-x0+400, 80);
+  g.strokeStyle = palette['--line']; g.lineWidth = 1.5/s;
+  g.beginPath(); g.moveTo(x0-200, 0); g.lineTo(x1+200, 0); g.stroke();
+  const xs = [J.ank1[0], J.ank2[0], J.toe1[0], J.toe2[0], J.hip[0]], lo = Math.min(...xs), hi = Math.max(...xs);
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse((lo+hi)/2, 0, (hi-lo)/2 + 10, 3.4, 0, 0, Math.PI*2); g.fill();
+  drawCharacter(g, p, J);
+}
+
+/* cartoon athlete: tapered limbs with a shared outline per body part, face follows the torso */
+const CHAR = {out:'#0e0c0b', skin:'#eab38c', skinFar:'#b98261', hair:'#2b1e17', shirt:'#e0503d', shirtHi:'#f0705c',
+              shorts:'#2d3a55', shortsFar:'#1e273b', shoe:'#efeae0', shoeFar:'#a8a298', sole:'#e0503d'};
+const OUT = 1.7;
+const lerp = (a, b, k) => [a[0]+(b[0]-a[0])*k, a[1]+(b[1]-a[1])*k];
+function capPath(g, a, b, ra, rb){
+  const ang = Math.atan2(b[1]-a[1], b[0]-a[0]) || 0, h = Math.PI/2;
+  g.beginPath();
+  g.arc(a[0], a[1], ra, ang+h, ang+3*h);
+  g.arc(b[0], b[1], rb, ang-h, ang+h);
+  g.closePath();
+}
+// parts: [a, b, ra, rb, fill] — outline every part first, then fill in order, so one limb reads as one shape
+function part(g, parts){
+  g.fillStyle = CHAR.out;
+  parts.forEach(([a,b,ra,rb]) => { capPath(g, a, b, ra+OUT, rb+OUT); g.fill(); });
+  parts.forEach(([a,b,ra,rb,fill]) => { g.fillStyle = fill; capPath(g, a, b, ra, rb); g.fill(); });
+}
+function leg(g, J, n, far){
+  const hip = J.hip, knee = J['knee'+n], ank = J['ank'+n], toe = J['toe'+n];
+  const skin = far ? CHAR.skinFar : CHAR.skin, shorts = far ? CHAR.shortsFar : CHAR.shorts, shoe = far ? CHAR.shoeFar : CHAR.shoe;
+  part(g, [
+    [hip, knee, 8, 6.2, skin], [knee, ank, 6.2, 4.4, skin],
+    [lerp(ank, toe, -0.15), toe, 5, 4.4, shoe],
+    [hip, lerp(hip, knee, .55), 9.2, 8, shorts]
+  ]);
+  // shoe sole stripe
+  const ang = Math.atan2(toe[1]-ank[1], toe[0]-ank[0]), px = Math.sin(ang)*3.4, py = -Math.cos(ang)*3.4;
+  g.strokeStyle = far ? CHAR.shortsFar : CHAR.sole; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(ank[0]+px, ank[1]+py); g.lineTo(toe[0]+px*.9, toe[1]+py*.9); g.stroke();
+}
+function arm(g, J, n, far){
+  const skin = far ? CHAR.skinFar : CHAR.skin, hd = J['hd'+n];
+  part(g, [[J.sh, J['el'+n], 5.8, 4.7, skin], [J['el'+n], hd, 4.7, 3.8, skin], [hd, hd, 4.6, 4.6, skin]]);
+}
+function bellAt(g, c, h, floor){
+  const L = Math.hypot(h[0]-c[0], h[1]-c[1]) || 1, up = [(h[0]-c[0])/L, (h[1]-c[1])/L];
+  if (floor){ g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(c[0], 0, 11, 2.6, 0, 0, Math.PI*2); g.fill(); }
+  g.save(); g.transform(up[1], -up[0], up[0], up[1], c[0], c[1]);   // local y points at the handle
+  g.lineWidth = 3.6 + OUT*2; g.strokeStyle = CHAR.out; g.beginPath(); g.arc(0, 9.5, 6, 0, Math.PI*2); g.stroke();
+  g.lineWidth = 3.4; g.strokeStyle = palette['--handle']; g.beginPath(); g.arc(0, 9.5, 6, 0, Math.PI*2); g.stroke();
+  g.fillStyle = CHAR.out; g.beginPath(); g.arc(0, 0, 10.5+OUT, 0, Math.PI*2); g.fill();
+  g.fillStyle = palette['--bell']; g.beginPath(); g.arc(0, 0, 10.5, 0, Math.PI*2); g.fill();
+  let gr = g.createRadialGradient(-2, 2, 4, 0, 0, 10.5);
+  gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.32)');
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 10.5, 0, Math.PI*2); g.fill();
+  gr = g.createRadialGradient(-4, 4, 0, -4, 4, 6);
+  gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(-4, 4, 6, 0, Math.PI*2); g.fill();
+  g.fillStyle = CHAR.out; g.fillRect(-6.5, -11.8, 13, 2.2);                 // flat base
+  g.restore();
+}
+function head(g, J, p){
+  const u0 = [J.sh[0]-J.hip[0], J.sh[1]-J.hip[1]], L = Math.hypot(...u0) || 1, u = [u0[0]/L, u0[1]/L];
+  const f = [u[1]*p.face, -u[0]*p.face];
+  const nb = [J.sh[0]+u[0]*4, J.sh[1]+u[1]*4], hc = [J.sh[0]+u[0]*17, J.sh[1]+u[1]*17];
+  part(g, [[nb, lerp(nb, hc, .55), 4.6, 4.2, CHAR.skin]]);                   // neck
+  g.save(); g.transform(f[0], f[1], u[0], u[1], hc[0], hc[1]);                // local x = face, y = up
+  const R = 11;
+  g.fillStyle = CHAR.out; g.beginPath(); g.arc(0, 0, R+OUT, 0, Math.PI*2); g.fill();
+  g.fillStyle = CHAR.skin; g.beginPath(); g.arc(0, 0, R, 0, Math.PI*2); g.fill();
+  // hair cap
+  g.fillStyle = CHAR.hair; g.beginPath();
+  g.moveTo(Math.cos(.75)*R, Math.sin(.75)*R);
+  for (let a = .75; a <= 3.85; a += .1) g.lineTo(Math.cos(a)*(R+.6), Math.sin(a)*(R+.6));
+  g.lineTo(-4, 1); g.quadraticCurveTo(2, 5.5, Math.cos(.75)*R, Math.sin(.75)*R); g.fill();
+  // headband in the bell colour, knot tails at the back
+  g.strokeStyle = palette['--bell']; g.lineWidth = 3.4; g.lineCap = 'butt';
+  g.beginPath(); g.moveTo(Math.cos(.55)*R, Math.sin(.55)*R); g.lineTo(Math.cos(3.3)*R, Math.sin(3.3)*R); g.stroke();
+  g.lineCap = 'round'; g.lineWidth = 2.2;
+  g.beginPath(); g.moveTo(-R+.5, 0); g.lineTo(-R-5, -4); g.moveTo(-R+.5, 0); g.lineTo(-R-6, 0.5); g.stroke();
+  // ear, eye, brow, mouth, cheek
+  g.fillStyle = CHAR.skin; g.strokeStyle = CHAR.out; g.lineWidth = 1.1;
+  g.beginPath(); g.ellipse(-3.4, -1.2, 2, 2.6, 0, 0, Math.PI*2); g.fill(); g.stroke();
+  g.beginPath(); g.arc(-3.2, -1.2, .9, 0, Math.PI*2); g.stroke();
+  g.fillStyle = CHAR.out; g.beginPath(); g.ellipse(5.8, 0.8, 1.35, 2, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(6.2, 1.6, .55, 0, Math.PI*2); g.fill();
+  g.strokeStyle = CHAR.hair; g.lineWidth = 1.4; g.beginPath(); g.moveTo(3.8, 4.2); g.lineTo(8, 3.6); g.stroke();
+  g.strokeStyle = CHAR.out; g.lineWidth = 1.2; g.beginPath(); g.moveTo(6.2, -5); g.quadraticCurveTo(8, -6.3, 9.6, -4.6); g.stroke();
+  g.fillStyle = 'rgba(232,96,84,.35)'; g.beginPath(); g.arc(4, -3.4, 2.1, 0, Math.PI*2); g.fill();
+  g.restore();
+}
+function torso(g, J, p){
+  const u0 = [J.sh[0]-J.hip[0], J.sh[1]-J.hip[1]], L = Math.hypot(...u0) || 1, u = [u0[0]/L, u0[1]/L];
+  const f = [u[1]*p.face, -u[0]*p.face];
+  const at = (k, fw) => [J.hip[0]+u0[0]*k+f[0]*fw, J.hip[1]+u0[1]*k+f[1]*fw];
+  part(g, [
+    [at(-.04, 0), at(.14, .5), 11, 11, CHAR.shorts],
+    [at(.18, .6), at(.68, 2.4), 10.6, 12.4, CHAR.shirt],
+    [at(.68, 2.4), at(.98, 0), 12.4, 8.6, CHAR.shirt]
+  ]);
+  // waistband + chest highlight
+  const w = at(.15, .5); g.strokeStyle = CHAR.out; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(w[0]+f[0]*10.5, w[1]+f[1]*10.5); g.lineTo(w[0]-f[0]*10.5, w[1]-f[1]*10.5); g.stroke();
+  const c = at(.7, 6.5); g.strokeStyle = CHAR.shirtHi; g.lineWidth = 2.4;
+  g.beginPath(); g.moveTo(...at(.5, 9.5)); g.quadraticCurveTo(c[0], c[1], ...at(.88, 6)); g.stroke();
+}
+function drawCharacter(g, p, J){
+  arm(g, J, 2, true);
+  leg(g, J, 2, true);
+  torso(g, J, p);
   if (p.glow > 0.01){
-    const mid = [(J.hip[0]+J.sh[0])/2, (J.hip[1]+J.sh[1])/2 + 6];
-    g.fillStyle = palette['--bell']; g.globalAlpha = .15 + .35*p.glow;
-    g.beginPath(); g.arc(mid[0], mid[1], 8 + 9*p.glow, 0, Math.PI*2); g.fill(); g.globalAlpha = 1;
+    const mid = lerp(J.hip, J.sh, .45);
+    g.fillStyle = palette['--bell']; g.globalAlpha = .15 + .4*p.glow;
+    g.beginPath(); g.arc(mid[0], mid[1], 7 + 9*p.glow, 0, Math.PI*2); g.fill(); g.globalAlpha = 1;
   }
-  seg([J.hip,J.sh], 11, near);
-  g.fillStyle = near; g.beginPath(); g.arc(J.head[0], J.head[1], 9, 0, Math.PI*2); g.fill();
-  seg([J.hip,J.knee1,J.ank1,J.toe1], 9, near);
-  if (J.bell){
-    const {c,h} = J.bell;
-    g.strokeStyle = palette['--handle']; g.lineWidth = 3.2;
-    const ang = Math.atan2(h[1]-c[1], h[0]-c[0]);
-    g.beginPath(); g.arc(c[0]+Math.cos(ang)*8, c[1]+Math.sin(ang)*8, 5, ang-1.6, ang+1.6); g.stroke();
-    g.fillStyle = palette['--bell']; g.beginPath(); g.arc(c[0], c[1], 9, 0, Math.PI*2); g.fill();
-  }
-  seg([J.sh,J.el1,J.hd1], 8, near);
+  leg(g, J, 1, false);
+  head(g, J, p);
+  if (J.bell) bellAt(g, J.bell.c, J.bell.h, p.bell === 'floor');
+  arm(g, J, 1, false);
 }
 const motionStart = performance.now();
 function motionLoop(now){
